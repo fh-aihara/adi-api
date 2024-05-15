@@ -23,7 +23,7 @@ daemon = True
 errorlog = './error_log.txt'
 
 # プロセスの名前
-proc_name = 'hanabi_apigw'
+proc_name = 'adi_apigw'
 
 # アクセスログ
 accesslog = './access_log.txt'
