@@ -1,6 +1,5 @@
 from base64 import decode
 from lib2to3.pgen2 import token
-from pymysql import NULL
 from fastapi import APIRouter, Header, Depends, HTTPException, status, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi import FastAPI, Request
