@@ -33,8 +33,27 @@ def get_session():
 class SQLQuery(BaseModel):
     sql: str
 
-# BigQueryクライアントの初期化
-client = bigquery.Client()
+@router.post('/gcp/query')
+def post_query(query: SQLQuery):
+    try:
+        query_job = client.query(query.sql)  # クエリの実行
+        results = query_job.result()  # クエリ結果の取得
+        
+        # 結果の整形
+        rows = []
+        for row in results:
+            rows.append(dict(row))
+        record_count = len(rows)
+        post_query({"SQL": str(query), 
+                    "last_query_records": record_count})
+        
+        return {"results": rows}
+    except (GoogleAPICallError, NotFound) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# # BigQueryクライアントの初期化
+# client = bigquery.Client()
 
 # router定義
 router = APIRouter()
@@ -80,22 +99,19 @@ def update_queries(query_id: int, query_history: query_histroy, session: Session
     session.commit()
     session.refresh(existing_query)
     return existing_query
+    
 
-
-@router.post('/gcp/query')
-def post_query(query: SQLQuery):
+@router.post('/login')
+def login(item: dict):
     try:
-        query_job = client.query(query.sql)  # クエリの実行
-        results = query_job.result()  # クエリ結果の取得
-        
-        # 結果の整形
-        rows = []
-        for row in results:
-            rows.append(dict(row))
-        record_count = len(rows)
-        post_query({"SQL": str(query), 
-                    "last_query_records": record_count})
-        
-        return {"results": rows}
-    except (GoogleAPICallError, NotFound) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(item)
+        username = item["username"]
+        password = item["password"]
+        # if username == "adi2024" and password == "tc8UYHLT":
+        if username == "adi2024" and password == "adi2024":
+            return "SUCCESS"
+        else:
+            return "WRONG"
+    except:
+        return "ERROR"
+    
