@@ -29,6 +29,9 @@ def get_session():
     with Session(engine) as session:
         yield session
 
+# router定義
+router = APIRouter()
+
 class SQLQuery(BaseModel):
     sql: str
 
@@ -51,11 +54,8 @@ def post_query(query: SQLQuery):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# # BigQueryクライアントの初期化
-# client = bigquery.Client()
-
-# router定義
-router = APIRouter()
+# BigQueryクライアントの初期化
+client = bigquery.Client()
 
 # init 処理
 @router.on_event("startup")
