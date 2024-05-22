@@ -49,7 +49,6 @@ def post_query(query: SQLQuery):
         record_count = len(rows)
         post_query({"SQL": str(query.sql), 
                     "last_query_records": record_count})
-        
         return {"results": rows}
     except (GoogleAPICallError, NotFound) as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -81,6 +80,8 @@ def get_queris(session: Session = Depends(get_session)):
 
 @router.post('/query')
 def post_query(query_history: query_histroy, session: Session = Depends(get_session)):
+    print(query_history)
+    print(session)
     session.add(query_history)
     session.commit()
     session.refresh(query_history)
