@@ -56,8 +56,8 @@ def post_query(query: SQLQuery, session: Session = Depends(get_session)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# # BigQueryクライアントの初期化
-# client = bigquery.Client()
+# BigQueryクライアントの初期化
+client = bigquery.Client()
 
 # init 処理
 @router.on_event("startup")
