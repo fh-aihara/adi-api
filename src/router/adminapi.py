@@ -38,6 +38,7 @@ class SQLQuery(BaseModel):
 @router.post('/gcp/query')
 def post_query(query: SQLQuery):
     try:
+        print(query)
         query_job = client.query(query.sql)  # クエリの実行
         results = query_job.result()  # クエリ結果の取得
         
