@@ -78,9 +78,9 @@ def get_queris(session: Session = Depends(get_session)):
     results = session.exec(query).all()
     return results
 
-
+# 内部からしか呼ばれない想定
 @router.post('/query')
-def post_query(query_history: query_histroy, session: Session = Depends(get_session)):
+def post_query(query_history: query_histroy, session: Session):
     print(query_history)
     print(session)
     session.add(query_history)
