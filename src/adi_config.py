@@ -2,7 +2,7 @@
 pythonpath = './'
 
 # ワーカー数
-workers = 8
+workers = 2
 
 # ワーカーのクラス、*2 にあるようにUvicornWorkerを指定 (Uvicornがインストールされている必要がある)
 worker_class = 'uvicorn.workers.UvicornWorker'
