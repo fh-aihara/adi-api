@@ -56,8 +56,8 @@ def post_query(query: SQLQuery, session: Session = Depends(get_session)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# BigQueryクライアントの初期化
-client = bigquery.Client()
+# # BigQueryクライアントの初期化
+# client = bigquery.Client()
 
 # init 処理
 @router.on_event("startup")
@@ -96,10 +96,10 @@ def update_queries(query_id: int, query_history: query_histroy, session: Session
     existing_query = session.get(query_histroy, query_id)
     if not existing_query:
         raise HTTPException(status_code=404, detail="Query not found")
-    # existing_query.SQL = query_history.SQL
+    existing_query.SQL = query_history.SQL
     existing_query.title = query_history.title
     existing_query.description = query_history.description
-    # existing_query.last_query_records = query_history.last_query_records
+    existing_query.last_query_records = query_history.last_query_records
     session.commit()
     session.refresh(existing_query)
     return existing_query
