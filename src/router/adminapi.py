@@ -36,7 +36,7 @@ class SQLQuery(BaseModel):
     sql: str
 
 @router.post('/gcp/query')
-def post_query(query: SQLQuery):
+def post_query(query: SQLQuery, session: Session = Depends(get_session)):
     try:
         print(query)
         query_job = client.query(query.sql)  # クエリの実行
@@ -47,8 +47,8 @@ def post_query(query: SQLQuery):
         for row in results:
             rows.append(dict(row))
         record_count = len(rows)
-        # post_query({"SQL": str(query.sql), 
-        #             "last_query_records": record_count})
+        post_query({"SQL": str(query.sql), 
+                    "last_query_records": record_count}, session=session)
         return {"results": rows}
     except (GoogleAPICallError, NotFound) as e:
         raise HTTPException(status_code=400, detail=str(e))
