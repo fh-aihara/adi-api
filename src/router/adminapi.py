@@ -47,7 +47,7 @@ def post_query(query: SQLQuery):
         for row in results:
             rows.append(dict(row))
         record_count = len(rows)
-        post_query({"SQL": str(query), 
+        post_query({"SQL": str(query.sql), 
                     "last_query_records": record_count})
         
         return {"results": rows}
