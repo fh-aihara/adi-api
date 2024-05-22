@@ -47,8 +47,8 @@ def post_query(query: SQLQuery):
         for row in results:
             rows.append(dict(row))
         record_count = len(rows)
-        post_query({"SQL": str(query.sql), 
-                    "last_query_records": record_count})
+        # post_query({"SQL": str(query.sql), 
+        #             "last_query_records": record_count})
         return {"results": rows}
     except (GoogleAPICallError, NotFound) as e:
         raise HTTPException(status_code=400, detail=str(e))
