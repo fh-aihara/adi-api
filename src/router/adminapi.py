@@ -35,29 +35,29 @@ router = APIRouter()
 class SQLQuery(BaseModel):
     sql: str
 
-# @router.post('/gcp/query')
-# def post_query(query: SQLQuery, session: Session = Depends(get_session)):
-#     try:
-#         print(query)
-#         query_job = client.query(query.sql)  # クエリの実行
-#         results = query_job.result()  # クエリ結果の取得
+@router.post('/gcp/query')
+def post_query(query: SQLQuery, session: Session = Depends(get_session)):
+    try:
+        print(query)
+        query_job = client.query(query.sql)  # クエリの実行
+        results = query_job.result()  # クエリ結果の取得
         
-#         # 結果の整形
-#         rows = []
-#         for row in results:
-#             rows.append(dict(row))
-#         record_count = len(rows)
-#         # post_query({"SQL": str(query.sql), 
-#         #             "last_query_records": record_count},)
-#         session.add(query_histroy(SQL=str(query.sql), last_query_records=record_count))
-#         session.commit()
-#         return {"results": rows}
-#     except (GoogleAPICallError, NotFound) as e:
-#         raise HTTPException(status_code=400, detail=str(e))
+        # 結果の整形
+        rows = []
+        for row in results:
+            rows.append(dict(row))
+        record_count = len(rows)
+        # post_query({"SQL": str(query.sql), 
+        #             "last_query_records": record_count},)
+        session.add(query_histroy(SQL=str(query.sql), last_query_records=record_count))
+        session.commit()
+        return {"results": rows}
+    except (GoogleAPICallError, NotFound) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-# # BigQueryクライアントの初期化
-# client = bigquery.Client()
+# BigQueryクライアントの初期化
+client = bigquery.Client()
 
 # init 処理
 @router.on_event("startup")
