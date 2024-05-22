@@ -71,12 +71,13 @@ def health_check():
     """
     return ('200 OK')
 
-# SI済
+
 @router.get('/queries')
 def get_queris(session: Session = Depends(get_session)):
     query = select(query_histroy)
     results = session.exec(query).all()
     return results
+
 
 @router.post('/query')
 def post_query(query_history: query_histroy, session: Session = Depends(get_session)):
