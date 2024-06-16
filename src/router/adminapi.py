@@ -169,7 +169,7 @@ def format_to_excel(data, property_customer_managed_id, date):
     
     return output_filepath
 
-@router.post('/gcp/query')
+@router.post('gcp/rentroll')
 def post_query(query: SQLQuery, session: Session = Depends(get_session)):
     try:
         # ベースとなるSQLクエリ
