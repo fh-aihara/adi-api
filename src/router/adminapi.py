@@ -131,9 +131,11 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
     ws = wb.active
 
     # データを所定の場所に書き込む
+    # title
     ws.cell(row=2, column=1, value=building_name)
-    
-    start_row = 7  # 開始行（例として2行目から）
+
+    # table 
+    start_row = 8
     for index, row in df.iterrows():
         ws.cell(row=start_row + index, column=1, value=row['floor'])
         ws.cell(row=start_row + index, column=2, value=row['unit'])
