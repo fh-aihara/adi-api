@@ -133,6 +133,7 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
     # データを所定の場所に書き込む
     # title
     ws.cell(row=2, column=1, value=building_name)
+    ws.cell(row=5, column=31, value=f"{date}時点")
 
     # table 
     start_row = 8
