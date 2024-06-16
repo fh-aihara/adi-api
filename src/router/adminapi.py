@@ -170,7 +170,9 @@ def format_to_excel(data, property_customer_managed_id, date):
     return output_filepath
 
 @router.post('/gcp/rentroll')
-def post_query(query: SQLQuery, session: Session = Depends(get_session)):
+def post_query(item: dict, session: Session = Depends(get_session)):
+    property_customer_managed_id = item["property_customer_managed_id"]
+    date = item["date"]
     try:
         # ベースとなるSQLクエリ
         base_sql = """
@@ -186,9 +188,9 @@ def post_query(query: SQLQuery, session: Session = Depends(get_session)):
         
         # フロントから受け取った情報でWHERE句を追加
         where_clause = f"""
-        AND shared_ard_buildings.property_customer_managed_code LIKE '%{query.property_customer_managed_id}%'
-        AND '{query.date}' > shared_ard_leasings.contract_start_date
-        AND '{query.date}' < shared_ard_leasings.contract_end_date
+        AND shared_ard_buildings.property_customer_managed_code LIKE '%{property_customer_managed_id}%'
+        AND '{date}' > shared_ard_leasings.contract_start_date
+        AND '{date}' < shared_ard_leasings.contract_end_date
         """
         
         # 完成したSQLクエリ
