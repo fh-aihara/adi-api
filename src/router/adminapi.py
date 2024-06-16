@@ -206,7 +206,7 @@ def post_query(item: dict, session: Session = Depends(get_session)):
         print(rows)
 
         # 結果をExcelに整形
-        output_filepath = format_to_excel(rows, query.property_customer_managed_id, query.date)
+        output_filepath = format_to_excel(rows, property_customer_managed_id, date)
         
         # Excelファイルのパスを返す
         return {"file_path": output_filepath}
