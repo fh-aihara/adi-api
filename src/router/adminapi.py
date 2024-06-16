@@ -195,15 +195,17 @@ def post_query(item: dict, session: Session = Depends(get_session)):
         
         # 完成したSQLクエリ
         final_sql = base_sql + where_clause
+        print("final sql: ", final_sql)
         query_job = client.query(final_sql)  # クエリの実行
         results = query_job.result()  # クエリ結果の取得
+        print("results: ", results)
         
         # 結果の整形
         rows = []
         for row in results:
             rows.append(dict(row))
         
-        print(rows)
+        print("rows :", rows)
 
         # 結果をExcelに整形
         output_filepath = format_to_excel(rows, property_customer_managed_id, date)
@@ -212,4 +214,5 @@ def post_query(item: dict, session: Session = Depends(get_session)):
         return {"file_path": output_filepath}
         
     except (GoogleAPICallError, NotFound) as e:
+       print(e)
        raise HTTPException(status_code=400, detail=str(e))
