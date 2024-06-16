@@ -223,7 +223,7 @@ def post_query(item: dict):
                     shared_ard_adi_view_leasing_invoice_templete.internet_usage_fee_excl_tax +
                     shared_ard_adi_view_leasing_invoice_templete.internet_connection_fee_excl_tax +
                     shared_ard_adi_view_leasing_invoice_templete.libli_club_membership_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.common_area_electricity_fee_excl_tax
+                    shared_ard_adi_view_leasing_invoice_templete.common_area_electricity_fee_not_new_excl_tax
                     ) AS other_cost,
                     ((
                     shared_ard_adi_view_leasing_invoice_templete.parking_fee_incl_tax +
@@ -246,7 +246,7 @@ def post_query(item: dict):
                     shared_ard_adi_view_leasing_invoice_templete.internet_usage_fee_incl_tax +
                     shared_ard_adi_view_leasing_invoice_templete.internet_connection_fee_incl_tax +
                     shared_ard_adi_view_leasing_invoice_templete.libli_club_membership_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.common_area_electricity_fee_incl_tax
+                    shared_ard_adi_view_leasing_invoice_templete.common_area_electricity_fee_not_new_incl_tax
                     ) - other_cost) AS other_cost_tax,
                     shared_ard_adi_view_leasing_tenant_invoice.security_deposit_incl_tax,
                     shared_ard_adi_view_leasing_tenant_invoice.key_money_incl_tax,
