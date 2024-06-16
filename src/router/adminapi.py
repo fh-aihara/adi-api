@@ -251,8 +251,13 @@ def post_query(item: dict, session: Session = Depends(get_session)):
 
         # 結果をExcelに整形
         output_filepath = format_to_excel(rows, property_customer_managed_id, date)
-        
-        return FileResponse(output_filepath, filename=f"{property_customer_managed_id}_{date}_rentroll.xlsx", media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+        # ファイルを返す
+        filename=f"{property_customer_managed_id}_{date}_rentroll.xlsx"
+        headers = {"Content-Disposition": f"attachment; filename={filename}"}
+        return FileResponse(output_filepath, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
+        # return FileResponse(output_filepath, filename=f"{property_customer_managed_id}_{date}_rentroll.xlsx", 
+        #                     media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
         
     except (GoogleAPICallError, NotFound) as e:
