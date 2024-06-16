@@ -126,7 +126,7 @@ def format_to_excel(data, property_customer_managed_id, date):
     df = pd.DataFrame(data)
     
     # 既存のテンプレートを読み込む
-    template_path = '/mnt/data/レントロール(原本).xlsx'
+    template_path = './レントロール(原本).xlsx'
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
