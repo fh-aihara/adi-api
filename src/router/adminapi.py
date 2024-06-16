@@ -142,7 +142,10 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
         ws.cell(row=start_row + index, column=3, value=row['use_type'])
         ws.cell(row=start_row + index, column=4, value=row['contract_area_m2'])
         ws.cell(row=start_row + index, column=5, value=round(row['contract_area_tsubo'], 2))
-        ws.cell(row=start_row + index, column=6, value=row['applicant_name'])
+        if len(row['applicant_name']) != 0:
+            ws.cell(row=start_row + index, column=6, value=row['applicant_name'])
+        else:
+            ws.cell(row=start_row + index, column=6, value="空室")
         ws.cell(row=start_row + index, column=7, value=row['contract_type'])
         ws.cell(row=start_row + index, column=8, value=row['start_date'])
         ws.cell(row=start_row + index, column=9, value=row['lease_start_date'])
