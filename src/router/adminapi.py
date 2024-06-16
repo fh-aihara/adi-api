@@ -249,8 +249,9 @@ def post_query(item: dict):
         # 結果の整形
         rows = []
         building_name = ""
-        building_name = results[0]["building_name"]
         for row in results:
+            if building_name == "":
+                building_name = row['building_name']
             rows.append(dict(row))
         
         print("rows :", rows)
