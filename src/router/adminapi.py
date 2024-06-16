@@ -162,8 +162,8 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
         ws.cell(row=start_row + index, column=24, value=row['cleaning_tax'])
         ws.cell(row=start_row + index, column=25, value=row['renewal_fee'])
         ws.cell(row=start_row + index, column=26, value=row['renewal_office_fee'])
-        ws.cell(row=start_row + index, column=26, value=row['renewal_office_fee_tax'])
-        ws.cell(row=start_row + index, column=27, value=row['note'])
+        ws.cell(row=start_row + index, column=27, value=row['renewal_office_fee_tax'])
+        ws.cell(row=start_row + index, column=28, value=row['note'])
 
     # 出力ファイル名
     output_filename = f"{property_customer_managed_id}_{date}_rentroll.xlsx"
@@ -180,71 +180,68 @@ def post_query(item: dict):
     date = item["date"]
     try:
         # ベースとなるSQLクエリ
-        base_sql = """
+        base_sql = f"""
                 SELECT
-                shared_ard_buildings.name AS building_name,
-                shared_ard_rooms.room_floor_entrance_number AS floor,
-                shared_ard_rooms.room_number AS unit,
-                shared_ard_rooms.offer_use_type AS use_type,
-                shared_ard_rooms.room_floor_area_area_amount AS contract_area_m2,
-                shared_ard_rooms.room_floor_area_area_amount * 0.3205 AS contract_area_tsubo,
-                shared_ard_leasings.applicant_name,
-                shared_ard_leasings.contract_type,
-                leasings_origin_leasing.start_date,
-                shared_ard_leasings.contract_start_date AS lease_start_date,
-                shared_ard_leasings.contract_end_date AS lease_end_date,
-                shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS rent_per_tsubo,
-                shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax AS rent,
-                shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS maintenance_fee_per_tsubo,
-                shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax AS maintenance_fee,
-                shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax AS libli_club_monthly_fee,
-                shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax - shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_excl_tax AS tax,
-                0 AS other_cost,
-                0 AS other_cost_tax,
-                shared_ard_adi_view_leasing_tenant_invoice.security_deposit_incl_tax,
-                shared_ard_adi_view_leasing_tenant_invoice.key_money_incl_tax,
-                shared_ard_adi_view_leasing_tenant_invoice.guarantee_deposit_incl_tax,
-                shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax,
-                shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_incl_tax - shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax AS cleaning_tax,
-                0 AS renewal_fee,
-                0 AS renewal_office_fee,
-                0 AS renewal_office_fee_tax,
-                '' AS note
+                    shared_ard_buildings.name AS building_name,
+                    shared_ard_rooms.room_floor_entrance_number AS floor,
+                    shared_ard_rooms.room_number AS unit,
+                    shared_ard_rooms.offer_use_type AS use_type,
+                    shared_ard_rooms.room_floor_area_area_amount AS contract_area_m2,
+                    shared_ard_rooms.room_floor_area_area_amount * 0.3205 AS contract_area_tsubo,
+                    shared_ard_leasings.applicant_name,
+                    shared_ard_leasings.contract_type,
+                    leasings_origin_leasing.start_date,
+                    shared_ard_leasings.contract_start_date AS lease_start_date,
+                    shared_ard_leasings.contract_end_date AS lease_end_date,
+                    shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS rent_per_tsubo,
+                    shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax AS rent,
+                    shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS maintenance_fee_per_tsubo,
+                    shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax AS maintenance_fee,
+                    shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax AS libli_club_monthly_fee,
+                    shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax - shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_excl_tax AS tax,
+                    0 AS other_cost,
+                    0 AS other_cost_tax,
+                    shared_ard_adi_view_leasing_tenant_invoice.security_deposit_incl_tax,
+                    shared_ard_adi_view_leasing_tenant_invoice.key_money_incl_tax,
+                    shared_ard_adi_view_leasing_tenant_invoice.guarantee_deposit_incl_tax,
+                    shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax,
+                    shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_incl_tax - shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax AS cleaning_tax,
+                    0 AS renewal_fee,
+                    0 AS renewal_office_fee,
+                    0 AS renewal_office_fee_tax,
+                    '' AS note
                 FROM
-                ard-itandi-production.shared_ard.buildings shared_ard_buildings
+                    ard-itandi-production.shared_ard.buildings shared_ard_buildings
                 LEFT JOIN
-                ard-itandi-production.shared_ard.rooms shared_ard_rooms
+                    ard-itandi-production.shared_ard.rooms shared_ard_rooms
                 ON
-                shared_ard_buildings.property_id = shared_ard_rooms.buildling_property_id
+                    shared_ard_buildings.property_id = shared_ard_rooms.buildling_property_id
                 LEFT JOIN
-                ard-itandi-production.shared_ard.leasings shared_ard_leasings
+                    ard-itandi-production.shared_ard.leasings shared_ard_leasings
                 ON
-                shared_ard_rooms.property_id = shared_ard_leasings.property_id
+                    shared_ard_rooms.property_id = shared_ard_leasings.property_id
+                    AND '{date}' > shared_ard_leasings.contract_start_date
+                    AND '{date}' < shared_ard_leasings.contract_end_date
                 LEFT JOIN
-                ard-itandi-production.shared_ard_adi_view.leasing_tenant_invoice shared_ard_adi_view_leasing_tenant_invoice
+                    ard-itandi-production.shared_ard_adi_view.leasing_tenant_invoice shared_ard_adi_view_leasing_tenant_invoice
                 ON
-                shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_tenant_invoice.leasing_id
+                    shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_tenant_invoice.leasing_id
                 LEFT JOIN
-                ard-itandi-production.shared_ard_adi_view.leasing_invoice_templete shared_ard_adi_view_leasing_invoice_templete
+                    ard-itandi-production.shared_ard_adi_view.leasing_invoice_templete shared_ard_adi_view_leasing_invoice_templete
                 ON
-                shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_invoice_templete.leasing_id
+                    shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_invoice_templete.leasing_id
                 LEFT JOIN
-                ard-itandi-production.shared_ard.origin_leasings leasings_origin_leasing
+                    ard-itandi-production.shared_ard.origin_leasings leasings_origin_leasing
                 ON
-                shared_ard_leasings.origin_leasing_id = leasings_origin_leasing.id 
+                    shared_ard_leasings.origin_leasing_id = leasings_origin_leasing.id
+                WHERE
+                    REGEXP_CONTAINS(shared_ard_buildings.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
+                ORDER BY
+                    unit
                 """
         
-        # フロントから受け取った情報でWHERE句を追加
-        # shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax IS NOT NULL
-        where_clause = f"""
-                        WHERE REGEXP_CONTAINS(shared_ard_buildings.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
-                        AND '{date}' > shared_ard_leasings.contract_start_date
-                        AND '{date}' < shared_ard_leasings.contract_end_date
-                        ORDER BY unit
-                        """
-        
         # 完成したSQLクエリ
-        final_sql = base_sql + where_clause
+        final_sql = base_sql
         query_job = client.query(final_sql)  # クエリの実行
         results = query_job.result()  # クエリ結果の取得
         
