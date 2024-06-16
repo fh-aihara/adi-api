@@ -145,7 +145,7 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
         ws.cell(row=start_row + index, column=6, value=row['applicant_name'])
         ws.cell(row=start_row + index, column=7, value=row['contract_type'])
         ws.cell(row=start_row + index, column=8, value=row['start_date'])
-        ws.cell(row=start_row + index, column=9, value=row['leasestart_date'])
+        ws.cell(row=start_row + index, column=9, value=row['lease_start_date'])
         ws.cell(row=start_row + index, column=10, value=row['lease_end_date'])
         ws.cell(row=start_row + index, column=11, value=round(row['rent_per_tsubo'], 2))
         ws.cell(row=start_row + index, column=12, value=row['rent'])
