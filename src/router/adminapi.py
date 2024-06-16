@@ -195,8 +195,7 @@ def post_query(item: dict, session: Session = Depends(get_session)):
         
         # 完成したSQLクエリ
         final_sql = base_sql + where_clause
-        
-        query_job = session.query(final_sql)  # クエリの実行
+        query_job = client.query(final_sql)  # クエリの実行
         results = query_job.result()  # クエリ結果の取得
         
         # 結果の整形
