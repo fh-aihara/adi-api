@@ -162,7 +162,7 @@ def format_to_excel(data, property_customer_managed_id, date):
 
     # 出力ファイル名
     output_filename = f"{property_customer_managed_id}_{date}_rentroll.xlsx"
-    output_filepath = f"/mnt/data/{output_filename}"
+    output_filepath = f"./rentroll/{output_filename}"
     
     # ファイルに保存
     wb.save(output_filepath)
