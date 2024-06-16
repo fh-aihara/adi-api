@@ -176,15 +176,47 @@ def post_query(item: dict, session: Session = Depends(get_session)):
     try:
         # ベースとなるSQLクエリ
         base_sql = """
-        SELECT shared_ard_rooms.room_floor_entrance_number AS フロア, shared_ard_rooms.room_number AS 区画, shared_ard_rooms.offer_use_type AS 用途, shared_ard_rooms.room_floor_area_area_amount AS [契約面積(m2)], [shared_ard_rooms].[room_floor_area_area_amount]*0.3205 AS [契約面積(坪)], shared_ard_leasings.applicant_name, leasings_origin_leasing.start_date, shared_ard_leasings.contract_start_date AS 自, shared_ard_leasings.contract_end_date AS 至, [shared_ard_adi_view_leasing_invoice_templete].[rent_incl_tax]/([shared_ard_rooms].[room_floor_area_area_amount]*0.3205) AS 家賃坪単価, shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax AS 家賃, [shared_ard_adi_view_leasing_invoice_templete].[maintenance_fee_incl_tax]/([shared_ard_rooms].[room_floor_area_area_amount]*0.3205) AS 共益費坪単価, shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax AS 共益費, shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax AS リブリクラブ月額会費, [shared_ard_adi_view_leasing_invoice_templete].[libli_club_monthly_fee_incl_tax]-[shared_ard_adi_view_leasing_invoice_templete].[libli_club_monthly_fee_excl_tax] AS 消費税, 0 AS その他費用, 0 AS その他費用消費税, shared_ard_adi_view_leasing_tenant_invoice.security_deposit_incl_tax, shared_ard_adi_view_leasing_tenant_invoice.key_money_incl_tax, shared_ard_adi_view_leasing_tenant_invoice.guarantee_deposit_incl_tax, shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax, [room_cleaning_fee_upon_move_out_incl_tax]-[room_cleaning_fee_upon_move_out_excl_tax] AS クリーニング消費税, 0 AS 更新料, 0 AS 更新事務手数料, "" AS 備考
-        FROM ((((shared_ard_buildings shared_ard_buildings
-        LEFT JOIN shared_ard_rooms shared_ard_rooms ON shared_ard_buildings.property_id = shared_ard_rooms.buildling_property_id)
-        LEFT JOIN shared_ard_leasings shared_ard_leasings ON shared_ard_rooms.property_id = shared_ard_leasings.property_id)
-        LEFT JOIN shared_ard_adi_view_leasing_tenant_invoice shared_ard_adi_view_leasing_tenant_invoice ON shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_tenant_invoice.leasing_id)
-        LEFT JOIN shared_ard_adi_view_leasing_invoice_templete shared_ard_adi_view_leasing_invoice_templete ON shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_invoice_templete.leasing_id)
-        LEFT JOIN leasings_origin_leasing leasings_origin_leasing ON shared_ard_leasings.leasing_id = leasings_origin_leasing.leasing_id
-        WHERE ((shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax) Is Not Null)
-        """
+                    SELECT 
+                        shared_ard_rooms.room_floor_entrance_number AS 'フロア', 
+                        shared_ard_rooms.room_number AS '区画', 
+                        shared_ard_rooms.offer_use_type AS '用途', 
+                        shared_ard_rooms.room_floor_area_area_amount AS '契約面積(m2)', 
+                        shared_ard_rooms.room_floor_area_area_amount * 0.3205 AS '契約面積(坪)', 
+                        shared_ard_leasings.applicant_name, 
+                        leasings_origin_leasing.start_date, 
+                        shared_ard_leasings.contract_start_date AS '自', 
+                        shared_ard_leasings.contract_end_date AS '至', 
+                        shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS '家賃坪単価', 
+                        shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax AS '家賃', 
+                        shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS '共益費坪単価', 
+                        shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax AS '共益費', 
+                        shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax AS 'リブリクラブ月額会費', 
+                        shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax - shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_excl_tax AS '消費税', 
+                        0 AS 'その他費用', 
+                        0 AS 'その他費用消費税', 
+                        shared_ard_adi_view_leasing_tenant_invoice.security_deposit_incl_tax, 
+                        shared_ard_adi_view_leasing_tenant_invoice.key_money_incl_tax, 
+                        shared_ard_adi_view_leasing_tenant_invoice.guarantee_deposit_incl_tax, 
+                        shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax, 
+                        shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_incl_tax - shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax AS 'クリーニング消費税', 
+                        0 AS '更新料', 
+                        0 AS '更新事務手数料', 
+                        '' AS '備考'
+                    FROM 
+                        shared_ard_buildings 
+                    LEFT JOIN 
+                        shared_ard_rooms ON shared_ard_buildings.property_id = shared_ard_rooms.buildling_property_id
+                    LEFT JOIN 
+                        shared_ard_leasings ON shared_ard_rooms.property_id = shared_ard_leasings.property_id
+                    LEFT JOIN 
+                        shared_ard_adi_view_leasing_tenant_invoice ON shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_tenant_invoice.leasing_id
+                    LEFT JOIN 
+                        shared_ard_adi_view_leasing_invoice_templete ON shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_invoice_templete.leasing_id
+                    LEFT JOIN 
+                        leasings_origin_leasing ON shared_ard_leasings.leasing_id = leasings_origin_leasing.leasing_id
+                    WHERE 
+                        shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax IS NOT NULL
+                    """
         
         # フロントから受け取った情報でWHERE句を追加
         where_clause = f"""
