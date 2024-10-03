@@ -185,9 +185,9 @@ def post_query(item: dict):
                 SELECT
                     *
                 FROM
-                    ard-itandi-production.shared_ard_adi_view.rentroll_output_table
+                    ard-itandi-production.shared_ard_adi_view.rentroll_output_table as rentroll_output_table
                 WHERE
-                    REGEXP_CONTAINS(shared_ard_buildings.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
+                    REGEXP_CONTAINS(rentroll_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
                 ORDER BY
                     unit
                 """
