@@ -143,10 +143,7 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
         ws.cell(row=start_row + index, column=3, value=row['use_type'])
         ws.cell(row=start_row + index, column=4, value=row['contract_area_m2'])
         ws.cell(row=start_row + index, column=5, value=round(row['contract_area_tsubo'], 2))
-        if row['applicant_name'] is not None:
-            ws.cell(row=start_row + index, column=6, value=row['applicant_name'])
-        else:
-            ws.cell(row=start_row + index, column=6, value="空室")
+        ws.cell(row=start_row + index, column=6, value=row['applicant_name'])
         ws.cell(row=start_row + index, column=7, value=row['contract_type'])
         ws.cell(row=start_row + index, column=8, value=row['start_date'])
         ws.cell(row=start_row + index, column=9, value=row['lease_start_date'])
@@ -186,124 +183,9 @@ def post_query(item: dict):
         # ベースとなるSQLクエリ
         base_sql = f"""
                 SELECT
-                    shared_ard_buildings.name AS building_name,
-                    shared_ard_rooms.room_floor_entrance_number AS floor,
-                    shared_ard_rooms.room_number AS unit,
-                    shared_ard_rooms.offer_use_type AS use_type,
-                    shared_ard_rooms.room_floor_area_area_amount AS contract_area_m2,
-                    shared_ard_rooms.room_floor_area_area_amount * 0.3205 AS contract_area_tsubo,
-                    shared_ard_leasings.applicant_name,
-                    shared_ard_leasings.contract_type,
-                    leasings_origin_leasing.start_date,
-                    shared_ard_leasings.contract_start_date AS lease_start_date,
-                    shared_ard_leasings.contract_end_date AS lease_end_date,
-                    shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS rent_per_tsubo,
-                    shared_ard_adi_view_leasing_invoice_templete.rent_incl_tax AS rent,
-                    shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax / (shared_ard_rooms.room_floor_area_area_amount * 0.3205) AS maintenance_fee_per_tsubo,
-                    shared_ard_adi_view_leasing_invoice_templete.maintenance_fee_incl_tax AS maintenance_fee,
-                    shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax AS libli_club_monthly_fee,
-                    shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_incl_tax - shared_ard_adi_view_leasing_invoice_templete.libli_club_monthly_fee_excl_tax AS tax,
-                    (
-                    shared_ard_adi_view_leasing_invoice_templete.parking_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.cable_tv_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.neighborhood_association_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_water_fee_monthly_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.motorcycle_parking_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.signboard_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.transfer_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.bicycle_parking_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.administrative_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.electricity_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_gas_fee_monthly_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.parking_rent_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.transfer_fee_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.environmental_maintenance_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.cable_tv_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.administrative_fee_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_water_fee_not_new_monthly_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.internet_usage_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.internet_connection_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.libli_club_membership_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.common_area_electricity_fee_not_new_excl_tax
-                    ) AS other_cost,
-                    ((
-                    shared_ard_adi_view_leasing_invoice_templete.parking_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.cable_tv_not_new_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.neighborhood_association_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_water_fee_monthly_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.motorcycle_parking_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.signboard_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.transfer_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.bicycle_parking_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.administrative_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.electricity_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_gas_fee_monthly_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.parking_rent_not_new_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.transfer_fee_not_new_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.environmental_maintenance_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.cable_tv_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.administrative_fee_not_new_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_water_fee_not_new_monthly_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.internet_usage_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.internet_connection_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.libli_club_membership_fee_incl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.common_area_electricity_fee_not_new_incl_tax
-                    ) - (
-                    shared_ard_adi_view_leasing_invoice_templete.parking_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.cable_tv_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.neighborhood_association_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_water_fee_monthly_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.motorcycle_parking_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.signboard_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.transfer_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.bicycle_parking_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.administrative_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.electricity_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_gas_fee_monthly_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.parking_rent_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.transfer_fee_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.environmental_maintenance_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.cable_tv_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.administrative_fee_not_new_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.fixed_water_fee_not_new_monthly_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.internet_usage_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.internet_connection_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.libli_club_membership_fee_excl_tax +
-                    shared_ard_adi_view_leasing_invoice_templete.common_area_electricity_fee_not_new_excl_tax
-                    )) AS other_cost_tax,
-                    shared_ard_adi_view_leasing_tenant_invoice.security_deposit_incl_tax,
-                    shared_ard_adi_view_leasing_tenant_invoice.key_money_incl_tax,
-                    shared_ard_adi_view_leasing_tenant_invoice.guarantee_deposit_incl_tax,
-                    shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax,
-                    shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_incl_tax - shared_ard_adi_view_leasing_tenant_invoice.room_cleaning_fee_upon_move_out_excl_tax AS cleaning_tax,
-                    0 AS renewal_fee,
-                    0 AS renewal_office_fee,
-                    0 AS renewal_office_fee_tax,
-                    '' AS note
+                    *
                 FROM
-                    ard-itandi-production.shared_ard.buildings shared_ard_buildings
-                LEFT JOIN
-                    ard-itandi-production.shared_ard.rooms shared_ard_rooms
-                ON
-                    shared_ard_buildings.property_id = shared_ard_rooms.buildling_property_id
-                LEFT JOIN
-                    ard-itandi-production.shared_ard.leasings shared_ard_leasings
-                ON
-                    shared_ard_rooms.property_id = shared_ard_leasings.property_id
-                    AND '{date}' > shared_ard_leasings.contract_start_date
-                    AND '{date}' < shared_ard_leasings.contract_end_date
-                LEFT JOIN
-                    ard-itandi-production.shared_ard_adi_view.leasing_tenant_invoice shared_ard_adi_view_leasing_tenant_invoice
-                ON
-                    shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_tenant_invoice.leasing_id
-                LEFT JOIN
-                    ard-itandi-production.shared_ard_adi_view.leasing_invoice_templete shared_ard_adi_view_leasing_invoice_templete
-                ON
-                    shared_ard_leasings.leasing_id = shared_ard_adi_view_leasing_invoice_templete.leasing_id
-                LEFT JOIN
-                    ard-itandi-production.shared_ard.origin_leasings leasings_origin_leasing
-                ON
-                    shared_ard_leasings.origin_leasing_id = leasings_origin_leasing.id
+                    ard-itandi-production.shared_ard_adi_view.rentroll_output_table
                 WHERE
                     REGEXP_CONTAINS(shared_ard_buildings.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
                 ORDER BY
