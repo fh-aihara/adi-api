@@ -166,10 +166,11 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
         ws.cell(row=start_row + index, column=27, value=row['renewal_office_fee_tax'])
         ws.cell(row=start_row + index, column=28, value=row['note'])
 
-    # 不要な行を削除
+    # 不要な行を非表示にする
     last_row = start_row + len(df) - 1
     if last_row < 47:
-        ws.delete_rows(last_row + 1, 47 - last_row)
+        for row in range(last_row + 1, 48):
+            ws.row_dimensions[row].hidden = True
 
     # 出力ファイル名
     output_filename = f"{property_customer_managed_id}_{date}_rentroll.xlsx"
@@ -179,6 +180,7 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
     wb.save(output_filepath)
     
     return output_filepath
+
 
 @router.post('/gcp/rentroll')
 def post_query(item: dict):
