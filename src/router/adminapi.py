@@ -144,11 +144,12 @@ def post_query(item: dict):
             *
         FROM
             ard-itandi-production.shared_ard_adi_view.rentroll_parking_output_table as rentroll_parking_output_table
-        WHERE
-            REGEXP_CONTAINS(rentroll_parking_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
-        ORDER BY
-            parking_type, parking_space_number
+        LIMIT 100
         """
+        # WHERE
+        #     REGEXP_CONTAINS(rentroll_parking_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
+        # ORDER BY
+        #     parking_type, parking_space_number
 
         # クエリの実行
         rentroll_job = client.query(rentroll_sql)
