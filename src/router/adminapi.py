@@ -181,21 +181,9 @@ def post_query(item: dict):
        print(e)
        raise HTTPException(status_code=400, detail=str(e))
 
-def copy_row_style_and_merge(ws, source_row, target_row):
-    for column in range(1, ws.max_column + 1):
-        source_cell = ws.cell(row=source_row, column=column)
-        target_cell = ws.cell(row=target_row, column=column)
-        target_cell._style = copy(source_cell._style)
-    
-    for merged_cell_range in ws.merged_cells.ranges:
-        if source_row in range(merged_cell_range.min_row, merged_cell_range.max_row + 1):
-            min_col, max_col = merged_cell_range.min_col, merged_cell_range.max_col
-            ws.merge_cells(start_row=target_row, start_column=min_col, end_row=target_row, end_column=max_col)
-
-def insert_row_with_style(ws, row_index):
+def insert_row(ws, row_index):
     ws.insert_rows(row_index)
-    copy_row_style_and_merge(ws, row_index-1, row_index)
-    
+
 def write_to_merged_cell(ws, row, col, value):
     cell = ws.cell(row=row, column=col)
     if cell.coordinate in ws.merged_cells:
@@ -232,7 +220,7 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
 
     for row in rentroll_data:
         if current_row > end_row:
-            insert_row_with_style(ws, current_row)
+            insert_row(ws, current_row)
             added_room_rows += 1
 
         write_to_merged_cell(ws, current_row, 1, safe_value(row.get('floor')))
@@ -277,10 +265,7 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
     for row in parking_data:
         if row.get('parking_type') == 'car':
             if car_parking_row > car_parking_end_row:
-                insert_row_with_style(ws, car_parking_row)
-                # 新しく挿入した行にも結合セルを適用
-                ws.merge_cells(start_row=car_parking_row, start_column=1, end_row=car_parking_row, end_column=2)
-                ws.merge_cells(start_row=car_parking_row, start_column=3, end_row=car_parking_row, end_column=5)
+                insert_row(ws, current_row)
                 added_car_rows += 1
 
             write_to_merged_cell(ws, car_parking_row, 1, safe_value(row.get('parking_space_number')))
@@ -313,10 +298,7 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
     for row in parking_data:
         if row.get('parking_type') == 'motorbike':
             if motorbike_parking_row > motorbike_parking_end_row:
-                insert_row_with_style(ws, motorbike_parking_row)
-                # 新しく挿入した行にも結合セルを適用
-                ws.merge_cells(start_row=motorbike_parking_row, start_column=1, end_row=motorbike_parking_row, end_column=2)
-                ws.merge_cells(start_row=motorbike_parking_row, start_column=3, end_row=motorbike_parking_row, end_column=5)
+                insert_row(ws, current_row)
                 added_motorbike_rows += 1
 
             write_to_merged_cell(ws, motorbike_parking_row, 1, safe_value(row.get('parking_space_number')))
