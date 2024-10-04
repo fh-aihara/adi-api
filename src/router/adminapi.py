@@ -144,12 +144,11 @@ def post_query(item: dict):
             *
         FROM
             ard-itandi-production.shared_ard_adi_view.rentroll_parking_output_table as rentroll_parking_output_table
-        LIMIT 100
+        WHERE
+            REGEXP_CONTAINS(rentroll_parking_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
+        ORDER BY
+            parking_type, parking_space_number
         """
-        # WHERE
-        #     REGEXP_CONTAINS(rentroll_parking_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
-        # ORDER BY
-        #     parking_type, parking_space_number
 
         # クエリの実行
         rentroll_job = client.query(rentroll_sql)
@@ -242,20 +241,20 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
     for row in parking_data:
         if row.get('parking_type') == 'car':
             ws.cell(row=car_parking_row, column=1, value=safe_value(row.get('parking_space_number')))
-            ws.cell(row=car_parking_row, column=2, value='駐車場')
-            ws.cell(row=car_parking_row, column=3, value=safe_value(row.get('applicant_name')))
-            ws.cell(row=car_parking_row, column=4, value=safe_value(row.get('contract_type')))
-            ws.cell(row=car_parking_row, column=5, value=safe_value(row.get('start_date')))
-            ws.cell(row=car_parking_row, column=6, value=safe_value(row.get('lease_start_date')))
-            ws.cell(row=car_parking_row, column=7, value=safe_value(row.get('lease_end_date')))
+            ws.cell(row=car_parking_row, column=3, value='駐車場')
+            ws.cell(row=car_parking_row, column=6, value=safe_value(row.get('applicant_name')))
+            ws.cell(row=car_parking_row, column=7, value=safe_value(row.get('contract_type')))
+            ws.cell(row=car_parking_row, column=8, value=safe_value(row.get('start_date')))
+            ws.cell(row=car_parking_row, column=9, value=safe_value(row.get('lease_start_date')))
+            ws.cell(row=car_parking_row, column=10, value=safe_value(row.get('lease_end_date')))
             parking_fee = safe_value(row.get('parking_fee_excl_tax'), 0)
-            ws.cell(row=car_parking_row, column=8, value=parking_fee if parking_fee != 0 else None)
-            ws.cell(row=car_parking_row, column=9, value=safe_value(row.get('parking_fee_tax')))
-            ws.cell(row=car_parking_row, column=11, value=safe_value(row.get('security_deposit_incl_tax')))
-            ws.cell(row=car_parking_row, column=12, value=safe_value(row.get('key_money_incl_tax')))
-            ws.cell(row=car_parking_row, column=13, value=safe_value(row.get('renewal_fee')))
-            ws.cell(row=car_parking_row, column=14, value=safe_value(row.get('renewal_office_fee')))
-            ws.cell(row=car_parking_row, column=15, value=safe_value(row.get('renewal_office_fee_tax')))
+            ws.cell(row=car_parking_row, column=11, value=parking_fee if parking_fee != 0 else None)
+            ws.cell(row=car_parking_row, column=12, value=safe_value(row.get('parking_fee_tax')))
+            ws.cell(row=car_parking_row, column=14, value=safe_value(row.get('security_deposit_incl_tax')))
+            ws.cell(row=car_parking_row, column=15, value=safe_value(row.get('key_money_incl_tax')))
+            ws.cell(row=car_parking_row, column=16, value=safe_value(row.get('renewal_fee')))
+            ws.cell(row=car_parking_row, column=17, value=safe_value(row.get('renewal_office_fee')))
+            ws.cell(row=car_parking_row, column=18, value=safe_value(row.get('renewal_office_fee_tax')))
             car_parking_row += 1
             if car_parking_row > 61:
                 ws.insert_rows(car_parking_row)
@@ -270,20 +269,20 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
     for row in parking_data:
         if row.get('parking_type') == 'motorbike':
             ws.cell(row=motorbike_parking_row, column=1, value=safe_value(row.get('parking_space_number')))
-            ws.cell(row=motorbike_parking_row, column=2, value='バイク置き場')
-            ws.cell(row=motorbike_parking_row, column=3, value=safe_value(row.get('applicant_name')))
-            ws.cell(row=motorbike_parking_row, column=4, value=safe_value(row.get('contract_type')))
-            ws.cell(row=motorbike_parking_row, column=5, value=safe_value(row.get('start_date')))
-            ws.cell(row=motorbike_parking_row, column=6, value=safe_value(row.get('lease_start_date')))
-            ws.cell(row=motorbike_parking_row, column=7, value=safe_value(row.get('lease_end_date')))
+            ws.cell(row=motorbike_parking_row, column=3, value='バイク置き場')
+            ws.cell(row=motorbike_parking_row, column=6, value=safe_value(row.get('applicant_name')))
+            ws.cell(row=motorbike_parking_row, column=7, value=safe_value(row.get('contract_type')))
+            ws.cell(row=motorbike_parking_row, column=8, value=safe_value(row.get('start_date')))
+            ws.cell(row=motorbike_parking_row, column=9, value=safe_value(row.get('lease_start_date')))
+            ws.cell(row=motorbike_parking_row, column=10, value=safe_value(row.get('lease_end_date')))
             motorcycle_fee = safe_value(row.get('motorcycle_parking_fee_excl_tax'), 0)
-            ws.cell(row=motorbike_parking_row, column=8, value=motorcycle_fee if motorcycle_fee != 0 else None)
-            ws.cell(row=motorbike_parking_row, column=9, value=safe_value(row.get('motorcycle_parking_fee_tax')))
-            ws.cell(row=motorbike_parking_row, column=11, value=safe_value(row.get('security_deposit_incl_tax')))
-            ws.cell(row=motorbike_parking_row, column=12, value=safe_value(row.get('key_money_incl_tax')))
-            ws.cell(row=motorbike_parking_row, column=13, value=safe_value(row.get('renewal_fee')))
-            ws.cell(row=motorbike_parking_row, column=14, value=safe_value(row.get('renewal_office_fee')))
-            ws.cell(row=motorbike_parking_row, column=15, value=safe_value(row.get('renewal_office_fee_tax')))
+            ws.cell(row=motorbike_parking_row, column=11, value=motorcycle_fee if motorcycle_fee != 0 else None)
+            ws.cell(row=motorbike_parking_row, column=12, value=safe_value(row.get('motorcycle_parking_fee_tax')))
+            ws.cell(row=motorbike_parking_row, column=14, value=safe_value(row.get('security_deposit_incl_tax')))
+            ws.cell(row=motorbike_parking_row, column=15, value=safe_value(row.get('key_money_incl_tax')))
+            ws.cell(row=motorbike_parking_row, column=16, value=safe_value(row.get('renewal_fee')))
+            ws.cell(row=motorbike_parking_row, column=17, value=safe_value(row.get('renewal_office_fee')))
+            ws.cell(row=motorbike_parking_row, column=18, value=safe_value(row.get('renewal_office_fee_tax')))
             motorbike_parking_row += 1
             if motorbike_parking_row > 75:
                 ws.insert_rows(motorbike_parking_row)
