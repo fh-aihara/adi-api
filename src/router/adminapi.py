@@ -121,10 +121,66 @@ def login(item: dict):
         return "ERROR"
     
 
-def format_to_excel(data, property_customer_managed_id, date, building_name):
-    # データフレームからExcelに変換
-    df = pd.DataFrame(data)
-    
+@router.post('/gcp/rentroll')
+def post_query(item: dict):
+    property_customer_managed_id = item["property_customer_managed_id"]
+    date = item["date"]
+    try:
+        # 賃貸借契約のクエリ
+        rentroll_sql = f"""
+        SELECT
+            *
+        FROM
+            ard-itandi-production.shared_ard_adi_view.rentroll_output_table as rentroll_output_table
+        WHERE
+            REGEXP_CONTAINS(rentroll_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
+        ORDER BY
+            unit
+        """
+        
+        # 駐車場とバイク置き場のクエリ
+        parking_sql = f"""
+        SELECT
+            *
+        FROM
+            ard-itandi-production.shared_ard_adi_view.rentroll_parking_output_table as rentroll_parking_output_table
+        WHERE
+            REGEXP_CONTAINS(rentroll_parking_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
+        ORDER BY
+            parking_type, parking_space_number
+        """
+
+        # クエリの実行
+        rentroll_job = client.query(rentroll_sql)
+        parking_job = client.query(parking_sql)
+
+        # 結果の取得
+        rentroll_results = rentroll_job.result()
+        parking_results = parking_job.result()
+        
+        # 結果の整形
+        rentroll_rows = [dict(row) for row in rentroll_results]
+        parking_rows = [dict(row) for row in parking_results]
+        
+        building_name = rentroll_rows[0]['building_name'] if rentroll_rows else ""
+        
+        # print("rentroll_rows :", rentroll_rows)
+        # print("parking_rows :", parking_rows)
+
+        # 結果をExcelに整形
+        output_filepath = format_to_excel(rentroll_rows, parking_rows, property_customer_managed_id, date, building_name)
+
+        # ファイルを返す
+        filename = f"{property_customer_managed_id}_{date}_rentroll.xlsx"
+        headers = {"Content-Disposition": f"attachment; filename={filename}"}
+        return FileResponse(output_filepath, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
+        
+    except (GoogleAPICallError, NotFound) as e:
+       print(e)
+       raise HTTPException(status_code=400, detail=str(e))
+
+
+def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, date, building_name):
     # 既存のテンプレートを読み込む
     template_path = './レントロール(原本).xlsx'
     wb = openpyxl.load_workbook(template_path)
@@ -135,9 +191,9 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
     ws.cell(row=2, column=1, value=building_name)
     ws.cell(row=5, column=31, value=f"{date}時点")
 
-    # table 
+    # 賃貸借契約テーブル 
     start_row = 8
-    for index, row in df.iterrows():
+    for index, row in enumerate(rentroll_data):
         ws.cell(row=start_row + index, column=1, value=row['floor'])
         ws.cell(row=start_row + index, column=2, value=row['unit'])
         ws.cell(row=start_row + index, column=3, value=row['use_type'])
@@ -167,10 +223,64 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
         ws.cell(row=start_row + index, column=28, value=row['note'])
 
     # 不要な行を非表示にする
-    last_row = start_row + len(df) - 1
+    last_row = start_row + len(rentroll_data) - 1
     if last_row < 47:
         for row in range(last_row + 1, 48):
             ws.row_dimensions[row].hidden = True
+
+    # 駐車場の情報を書き込む
+    car_parking_start_row = 53
+    car_parking_row = car_parking_start_row
+    for row in parking_data:
+        if row['parking_type'] == 'car':
+            ws.cell(row=car_parking_row, column=1, value=row['parking_space_number'])
+            ws.cell(row=car_parking_row, column=2, value='駐車場')
+            ws.cell(row=car_parking_row, column=3, value=row['applicant_name'])
+            ws.cell(row=car_parking_row, column=4, value=row['contract_type'])
+            ws.cell(row=car_parking_row, column=5, value=row['start_date'])
+            ws.cell(row=car_parking_row, column=6, value=row['lease_start_date'])
+            ws.cell(row=car_parking_row, column=7, value=row['lease_end_date'])
+            ws.cell(row=car_parking_row, column=8, value=row['parking_fee_incl_tax'] - row['parking_fee_tax'])
+            ws.cell(row=car_parking_row, column=9, value=row['parking_fee_tax'])
+            ws.cell(row=car_parking_row, column=11, value=row['security_deposit_incl_tax'])
+            ws.cell(row=car_parking_row, column=12, value=row['key_money_incl_tax'])
+            ws.cell(row=car_parking_row, column=13, value=row['renewal_fee'])
+            ws.cell(row=car_parking_row, column=14, value=row['renewal_office_fee'])
+            ws.cell(row=car_parking_row, column=15, value=row['renewal_office_fee_tax'])
+            car_parking_row += 1
+            if car_parking_row > 61:
+                ws.insert_rows(car_parking_row)
+
+    # 余った駐車場の行を非表示にする
+    for row in range(car_parking_row, 62):
+        ws.row_dimensions[row].hidden = True
+
+    # バイク置き場の情報を書き込む
+    motorbike_parking_start_row = 67
+    motorbike_parking_row = motorbike_parking_start_row
+    for row in parking_data:
+        if row['parking_type'] == 'motorbike':
+            ws.cell(row=motorbike_parking_row, column=1, value=row['parking_space_number'])
+            ws.cell(row=motorbike_parking_row, column=2, value='バイク置き場')
+            ws.cell(row=motorbike_parking_row, column=3, value=row['applicant_name'])
+            ws.cell(row=motorbike_parking_row, column=4, value=row['contract_type'])
+            ws.cell(row=motorbike_parking_row, column=5, value=row['start_date'])
+            ws.cell(row=motorbike_parking_row, column=6, value=row['lease_start_date'])
+            ws.cell(row=motorbike_parking_row, column=7, value=row['lease_end_date'])
+            ws.cell(row=motorbike_parking_row, column=8, value=row['motorcycle_parking_fee_incl_tax'] - row['motorcycle_parking_fee_tax'])
+            ws.cell(row=motorbike_parking_row, column=9, value=row['motorcycle_parking_fee_tax'])
+            ws.cell(row=motorbike_parking_row, column=11, value=row['security_deposit_incl_tax'])
+            ws.cell(row=motorbike_parking_row, column=12, value=row['key_money_incl_tax'])
+            ws.cell(row=motorbike_parking_row, column=13, value=row['renewal_fee'])
+            ws.cell(row=motorbike_parking_row, column=14, value=row['renewal_office_fee'])
+            ws.cell(row=motorbike_parking_row, column=15, value=row['renewal_office_fee_tax'])
+            motorbike_parking_row += 1
+            if motorbike_parking_row > 75:
+                ws.insert_rows(motorbike_parking_row)
+
+    # 余ったバイク置き場の行を非表示にする
+    for row in range(motorbike_parking_row, 76):
+        ws.row_dimensions[row].hidden = True
 
     # 出力ファイル名
     output_filename = f"{property_customer_managed_id}_{date}_rentroll.xlsx"
@@ -180,49 +290,3 @@ def format_to_excel(data, property_customer_managed_id, date, building_name):
     wb.save(output_filepath)
     
     return output_filepath
-
-
-@router.post('/gcp/rentroll')
-def post_query(item: dict):
-    property_customer_managed_id = item["property_customer_managed_id"]
-    date = item["date"]
-    try:
-        # ベースとなるSQLクエリ
-        base_sql = f"""
-                SELECT
-                    *
-                FROM
-                    ard-itandi-production.shared_ard_adi_view.rentroll_output_table as rentroll_output_table
-                WHERE
-                    REGEXP_CONTAINS(rentroll_output_table.property_customer_managed_code, '..{property_customer_managed_id}(-[0-9]+)?')
-                ORDER BY
-                    unit
-                """
-        
-        # 完成したSQLクエリ
-        final_sql = base_sql
-        query_job = client.query(final_sql)  # クエリの実行
-        results = query_job.result()  # クエリ結果の取得
-        
-        # 結果の整形
-        rows = []
-        building_name = ""
-        for row in results:
-            if building_name == "":
-                building_name = row['building_name']
-            rows.append(dict(row))
-        
-        print("rows :", rows)
-
-        # 結果をExcelに整形
-        output_filepath = format_to_excel(rows, property_customer_managed_id, date, building_name)
-
-        # ファイルを返す
-        filename=f"{property_customer_managed_id}_{date}_rentroll.xlsx"
-        headers = {"Content-Disposition": f"attachment; filename={filename}"}
-        return FileResponse(output_filepath, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
-        
-        
-    except (GoogleAPICallError, NotFound) as e:
-       print(e)
-       raise HTTPException(status_code=400, detail=str(e))
