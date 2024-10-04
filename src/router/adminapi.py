@@ -164,8 +164,8 @@ def post_query(item: dict):
         
         building_name = rentroll_rows[0]['building_name'] if rentroll_rows else ""
         
-        # print("rentroll_rows :", rentroll_rows)
-        # print("parking_rows :", parking_rows)
+        print("rentroll_rows :", rentroll_rows)
+        print("parking_rows :", parking_rows)
 
         # 結果をExcelに整形
         output_filepath = format_to_excel(rentroll_rows, parking_rows, property_customer_managed_id, date, building_name)
