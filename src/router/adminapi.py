@@ -182,19 +182,20 @@ def post_query(item: dict):
        raise HTTPException(status_code=400, detail=str(e))
 
 def copy_row_style_and_merge(ws, source_row, target_row):
-    for cell in ws[source_row]:
-        new_cell = ws.cell(row=target_row, column=cell.column)
-        new_cell._style = copy(cell._style)
+    for column in range(1, ws.max_column + 1):
+        source_cell = ws.cell(row=source_row, column=column)
+        target_cell = ws.cell(row=target_row, column=column)
+        target_cell._style = copy(source_cell._style)
     
     for merged_cell_range in ws.merged_cells.ranges:
-        if source_row in merged_cell_range:
+        if source_row in range(merged_cell_range.min_row, merged_cell_range.max_row + 1):
             min_col, max_col = merged_cell_range.min_col, merged_cell_range.max_col
             ws.merge_cells(start_row=target_row, start_column=min_col, end_row=target_row, end_column=max_col)
 
 def insert_row_with_style(ws, row_index):
     ws.insert_rows(row_index)
     copy_row_style_and_merge(ws, row_index-1, row_index)
-
+    
 def write_to_merged_cell(ws, row, col, value):
     cell = ws.cell(row=row, column=col)
     if cell.coordinate in ws.merged_cells:
