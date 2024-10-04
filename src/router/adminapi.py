@@ -22,6 +22,8 @@ from google.api_core.exceptions import GoogleAPICallError, NotFound
 from pydantic import BaseModel
 import pandas as pd
 import openpyxl
+from copy import copy
+
 
 DATABASE = 'bq_query.db'
 
@@ -179,15 +181,19 @@ def post_query(item: dict):
        print(e)
        raise HTTPException(status_code=400, detail=str(e))
 
-def copy_cell_style(ws, source_row, target_row, start_col, end_col):
-    for col in range(start_col, end_col + 1):
-        source_cell = ws.cell(row=source_row, column=col)
-        target_cell = ws.cell(row=target_row, column=col)
-        target_cell._style = source_cell._style
+def copy_row_style_and_merge(ws, source_row, target_row):
+    for cell in ws[source_row]:
+        new_cell = ws.cell(row=target_row, column=cell.column)
+        new_cell._style = copy(cell._style)
+    
+    for merged_cell_range in ws.merged_cells.ranges:
+        if source_row in merged_cell_range:
+            min_col, max_col = merged_cell_range.min_col, merged_cell_range.max_col
+            ws.merge_cells(start_row=target_row, start_column=min_col, end_row=target_row, end_column=max_col)
 
 def insert_row_with_style(ws, row_index):
     ws.insert_rows(row_index)
-    copy_cell_style(ws, row_index-1, row_index, 1, ws.max_column)
+    copy_row_style_and_merge(ws, row_index-1, row_index)
 
 def write_to_merged_cell(ws, row, col, value):
     cell = ws.cell(row=row, column=col)
@@ -277,18 +283,19 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
                 added_car_rows += 1
 
             write_to_merged_cell(ws, car_parking_row, 1, safe_value(row.get('parking_space_number')))
-            write_to_merged_cell(ws, car_parking_row, 3, safe_value(row.get('applicant_name')))
-            write_to_merged_cell(ws, car_parking_row, 6, safe_value(row.get('contract_type')))
-            write_to_merged_cell(ws, car_parking_row, 7, safe_value(row.get('start_date')))
-            write_to_merged_cell(ws, car_parking_row, 8, safe_value(row.get('lease_start_date')))
-            write_to_merged_cell(ws, car_parking_row, 9, safe_value(row.get('lease_end_date')))
+            write_to_merged_cell(ws, car_parking_row, 3, '駐車場')
+            write_to_merged_cell(ws, car_parking_row, 6, safe_value(row.get('applicant_name')))
+            write_to_merged_cell(ws, car_parking_row, 7, safe_value(row.get('contract_type')))
+            write_to_merged_cell(ws, car_parking_row, 8, safe_value(row.get('start_date')))
+            write_to_merged_cell(ws, car_parking_row, 9, safe_value(row.get('lease_start_date')))
+            write_to_merged_cell(ws, car_parking_row, 10, safe_value(row.get('lease_end_date')))
             parking_fee = safe_value(row.get('parking_fee_excl_tax'), 0)
-            write_to_merged_cell(ws, car_parking_row, 10, parking_fee if parking_fee != 0 else None)
-            write_to_merged_cell(ws, car_parking_row, 11, safe_value(row.get('parking_fee_tax')))
-            write_to_merged_cell(ws, car_parking_row, 13, safe_value(row.get('security_deposit_incl_tax')))
-            write_to_merged_cell(ws, car_parking_row, 14, safe_value(row.get('key_money_incl_tax')))
-            write_to_merged_cell(ws, car_parking_row, 15, safe_value(row.get('renewal_fee')))
-            write_to_merged_cell(ws, car_parking_row, 16, safe_value(row.get('renewal_office_fee')))
+            write_to_merged_cell(ws, car_parking_row, 11, parking_fee if parking_fee != 0 else None)
+            write_to_merged_cell(ws, car_parking_row, 12, safe_value(row.get('parking_fee_tax')))
+            write_to_merged_cell(ws, car_parking_row, 14, safe_value(row.get('security_deposit_incl_tax')))
+            write_to_merged_cell(ws, car_parking_row, 15, safe_value(row.get('key_money_incl_tax')))
+            write_to_merged_cell(ws, car_parking_row, 16, safe_value(row.get('renewal_fee')))
+            write_to_merged_cell(ws, car_parking_row, 18, safe_value(row.get('renewal_office_fee')))
             write_to_merged_cell(ws, car_parking_row, 17, safe_value(row.get('renewal_office_fee_tax')))
             car_parking_row += 1
 
@@ -312,19 +319,20 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
                 added_motorbike_rows += 1
 
             write_to_merged_cell(ws, motorbike_parking_row, 1, safe_value(row.get('parking_space_number')))
-            write_to_merged_cell(ws, motorbike_parking_row, 3, safe_value(row.get('applicant_name')))
-            write_to_merged_cell(ws, motorbike_parking_row, 6, safe_value(row.get('contract_type')))
-            write_to_merged_cell(ws, motorbike_parking_row, 7, safe_value(row.get('start_date')))
-            write_to_merged_cell(ws, motorbike_parking_row, 8, safe_value(row.get('lease_start_date')))
-            write_to_merged_cell(ws, motorbike_parking_row, 9, safe_value(row.get('lease_end_date')))
+            write_to_merged_cell(ws, car_parking_row, 3, '駐車場')
+            write_to_merged_cell(ws, motorbike_parking_row, 6, safe_value(row.get('applicant_name')))
+            write_to_merged_cell(ws, motorbike_parking_row, 7, safe_value(row.get('contract_type')))
+            write_to_merged_cell(ws, motorbike_parking_row, 8, safe_value(row.get('start_date')))
+            write_to_merged_cell(ws, motorbike_parking_row, 9, safe_value(row.get('lease_start_date')))
+            write_to_merged_cell(ws, motorbike_parking_row, 10, safe_value(row.get('lease_end_date')))
             motorcycle_fee = safe_value(row.get('motorcycle_parking_fee_excl_tax'), 0)
-            write_to_merged_cell(ws, motorbike_parking_row, 10, motorcycle_fee if motorcycle_fee != 0 else None)
-            write_to_merged_cell(ws, motorbike_parking_row, 11, safe_value(row.get('motorcycle_parking_fee_tax')))
-            write_to_merged_cell(ws, motorbike_parking_row, 13, safe_value(row.get('security_deposit_incl_tax')))
-            write_to_merged_cell(ws, motorbike_parking_row, 14, safe_value(row.get('key_money_incl_tax')))
-            write_to_merged_cell(ws, motorbike_parking_row, 15, safe_value(row.get('renewal_fee')))
-            write_to_merged_cell(ws, motorbike_parking_row, 16, safe_value(row.get('renewal_office_fee')))
-            write_to_merged_cell(ws, motorbike_parking_row, 17, safe_value(row.get('renewal_office_fee_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 11, motorcycle_fee if motorcycle_fee != 0 else None)
+            write_to_merged_cell(ws, motorbike_parking_row, 12, safe_value(row.get('motorcycle_parking_fee_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 14, safe_value(row.get('security_deposit_incl_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 15, safe_value(row.get('key_money_incl_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 16, safe_value(row.get('renewal_fee')))
+            write_to_merged_cell(ws, motorbike_parking_row, 17, safe_value(row.get('renewal_office_fee')))
+            write_to_merged_cell(ws, motorbike_parking_row, 18, safe_value(row.get('renewal_office_fee_tax')))
             motorbike_parking_row += 1
 
     # 余ったバイク置き場の行を非表示にする
