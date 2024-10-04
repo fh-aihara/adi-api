@@ -181,8 +181,6 @@ def post_query(item: dict):
        print(e)
        raise HTTPException(status_code=400, detail=str(e))
 
-def insert_row(ws, row_index):
-    ws.insert_rows(row_index)
 
 def write_to_merged_cell(ws, row, col, value):
     cell = ws.cell(row=row, column=col)
@@ -193,6 +191,7 @@ def write_to_merged_cell(ws, row, col, value):
                 ws.cell(row=top_left[0], column=top_left[1], value=value)
                 return
     ws.cell(row=row, column=col, value=value)
+
 
 def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, date, building_name):
     # 既存のテンプレートを読み込む
@@ -214,112 +213,98 @@ def format_to_excel(rentroll_data, parking_data, property_customer_managed_id, d
 
     # 賃貸借契約テーブル 
     start_row = 8
-    end_row = 46  # テンプレートの元の終了行
+    end_row = 104
     current_row = start_row
-    added_room_rows = 0  # 追加された行数を追跡
 
     for row in rentroll_data:
-        if current_row > end_row:
-            insert_row(ws, current_row)
-            added_room_rows += 1
-
-        write_to_merged_cell(ws, current_row, 1, safe_value(row.get('floor')))
-        write_to_merged_cell(ws, current_row, 2, safe_value(row.get('unit')))
-        write_to_merged_cell(ws, current_row, 3, safe_value(row.get('use_type')))
-        write_to_merged_cell(ws, current_row, 4, safe_value(row.get('contract_area_m2')))
-        write_to_merged_cell(ws, current_row, 5, safe_round(row.get('contract_area_tsubo')))
-        write_to_merged_cell(ws, current_row, 6, safe_value(row.get('applicant_name')))
-        write_to_merged_cell(ws, current_row, 7, safe_value(row.get('contract_type')))
-        write_to_merged_cell(ws, current_row, 8, safe_value(row.get('start_date')))
-        write_to_merged_cell(ws, current_row, 9, safe_value(row.get('lease_start_date')))
-        write_to_merged_cell(ws, current_row, 10, safe_value(row.get('lease_end_date')))
-        write_to_merged_cell(ws, current_row, 11, safe_round(row.get('rent_per_tsubo')))
-        write_to_merged_cell(ws, current_row, 12, safe_value(row.get('rent')))
-        write_to_merged_cell(ws, current_row, 13, safe_round(row.get('maintenance_fee_per_tsubo')))
-        write_to_merged_cell(ws, current_row, 14, safe_value(row.get('maintenance_fee')))
-        write_to_merged_cell(ws, current_row, 15, safe_value(row.get('libli_club_monthly_fee')))
-        write_to_merged_cell(ws, current_row, 16, safe_value(row.get('tax')))
-        write_to_merged_cell(ws, current_row, 17, safe_value(row.get('other_cost')))
-        write_to_merged_cell(ws, current_row, 18, safe_value(row.get('other_cost_tax')))
-        write_to_merged_cell(ws, current_row, 20, safe_value(row.get('security_deposit_incl_tax')))
-        write_to_merged_cell(ws, current_row, 21, safe_value(row.get('key_money_incl_tax')))
-        write_to_merged_cell(ws, current_row, 22, safe_value(row.get('guarantee_deposit_incl_tax')))
-        write_to_merged_cell(ws, current_row, 23, safe_value(row.get('room_cleaning_fee_upon_move_out_excl_tax')))
-        write_to_merged_cell(ws, current_row, 24, safe_value(row.get('cleaning_tax')))
-        write_to_merged_cell(ws, current_row, 25, safe_value(row.get('renewal_fee')))
-        write_to_merged_cell(ws, current_row, 26, safe_value(row.get('renewal_office_fee')))
-        write_to_merged_cell(ws, current_row, 27, safe_value(row.get('renewal_office_fee_tax')))
-        write_to_merged_cell(ws, current_row, 28, safe_value(row.get('note')))
-        current_row += 1
+        if current_row <= end_row:
+            write_to_merged_cell(ws, current_row, 1, safe_value(row.get('floor')))
+            write_to_merged_cell(ws, current_row, 2, safe_value(row.get('unit')))
+            write_to_merged_cell(ws, current_row, 3, safe_value(row.get('use_type')))
+            write_to_merged_cell(ws, current_row, 4, safe_value(row.get('contract_area_m2')))
+            write_to_merged_cell(ws, current_row, 5, safe_round(row.get('contract_area_tsubo')))
+            write_to_merged_cell(ws, current_row, 6, safe_value(row.get('applicant_name')))
+            write_to_merged_cell(ws, current_row, 7, safe_value(row.get('contract_type')))
+            write_to_merged_cell(ws, current_row, 8, safe_value(row.get('start_date')))
+            write_to_merged_cell(ws, current_row, 9, safe_value(row.get('lease_start_date')))
+            write_to_merged_cell(ws, current_row, 10, safe_value(row.get('lease_end_date')))
+            write_to_merged_cell(ws, current_row, 11, safe_round(row.get('rent_per_tsubo')))
+            write_to_merged_cell(ws, current_row, 12, safe_value(row.get('rent')))
+            write_to_merged_cell(ws, current_row, 13, safe_round(row.get('maintenance_fee_per_tsubo')))
+            write_to_merged_cell(ws, current_row, 14, safe_value(row.get('maintenance_fee')))
+            write_to_merged_cell(ws, current_row, 15, safe_value(row.get('libli_club_monthly_fee')))
+            write_to_merged_cell(ws, current_row, 16, safe_value(row.get('tax')))
+            write_to_merged_cell(ws, current_row, 17, safe_value(row.get('other_cost')))
+            write_to_merged_cell(ws, current_row, 18, safe_value(row.get('other_cost_tax')))
+            write_to_merged_cell(ws, current_row, 20, safe_value(row.get('security_deposit_incl_tax')))
+            write_to_merged_cell(ws, current_row, 21, safe_value(row.get('key_money_incl_tax')))
+            write_to_merged_cell(ws, current_row, 22, safe_value(row.get('guarantee_deposit_incl_tax')))
+            write_to_merged_cell(ws, current_row, 23, safe_value(row.get('room_cleaning_fee_upon_move_out_excl_tax')))
+            write_to_merged_cell(ws, current_row, 24, safe_value(row.get('cleaning_tax')))
+            write_to_merged_cell(ws, current_row, 25, safe_value(row.get('renewal_fee')))
+            write_to_merged_cell(ws, current_row, 26, safe_value(row.get('renewal_office_fee')))
+            write_to_merged_cell(ws, current_row, 27, safe_value(row.get('renewal_office_fee_tax')))
+            write_to_merged_cell(ws, current_row, 28, safe_value(row.get('note')))
+            current_row += 1
 
     # 余った部屋の行を非表示にする
-    for row in range(current_row, end_row + 1 + added_room_rows):
+    for row in range(current_row, end_row + 1):
         ws.row_dimensions[row].hidden = True
 
     # 駐車場の情報を書き込む
-    car_parking_start_row = 53 + added_room_rows
-    car_parking_end_row = 61 + added_room_rows  # テンプレートの元の終了行 + 部屋の追加行数
+    car_parking_start_row = 110
+    car_parking_end_row = 151
     car_parking_row = car_parking_start_row
-    added_car_rows = 0  # 追加された行数を追跡
 
     for row in parking_data:
-        if row.get('parking_type') == 'car':
-            if car_parking_row > car_parking_end_row:
-                insert_row(ws, current_row)
-                added_car_rows += 1
-
+        if row.get('parking_type') == 'car' and car_parking_row <= car_parking_end_row:
             write_to_merged_cell(ws, car_parking_row, 1, safe_value(row.get('parking_space_number')))
-            write_to_merged_cell(ws, car_parking_row, 3, '駐車場')
-            write_to_merged_cell(ws, car_parking_row, 6, safe_value(row.get('applicant_name')))
-            write_to_merged_cell(ws, car_parking_row, 7, safe_value(row.get('contract_type')))
-            write_to_merged_cell(ws, car_parking_row, 8, safe_value(row.get('start_date')))
-            write_to_merged_cell(ws, car_parking_row, 9, safe_value(row.get('lease_start_date')))
-            write_to_merged_cell(ws, car_parking_row, 10, safe_value(row.get('lease_end_date')))
+            write_to_merged_cell(ws, car_parking_row, 2, '駐車場')
+            write_to_merged_cell(ws, car_parking_row, 3, safe_value(row.get('applicant_name')))
+            write_to_merged_cell(ws, car_parking_row, 6, safe_value(row.get('contract_type')))
+            write_to_merged_cell(ws, car_parking_row, 7, safe_value(row.get('start_date')))
+            write_to_merged_cell(ws, car_parking_row, 8, safe_value(row.get('lease_start_date')))
+            write_to_merged_cell(ws, car_parking_row, 9, safe_value(row.get('lease_end_date')))
             parking_fee = safe_value(row.get('parking_fee_excl_tax'), 0)
-            write_to_merged_cell(ws, car_parking_row, 11, parking_fee if parking_fee != 0 else None)
-            write_to_merged_cell(ws, car_parking_row, 12, safe_value(row.get('parking_fee_tax')))
-            write_to_merged_cell(ws, car_parking_row, 14, safe_value(row.get('security_deposit_incl_tax')))
-            write_to_merged_cell(ws, car_parking_row, 15, safe_value(row.get('key_money_incl_tax')))
-            write_to_merged_cell(ws, car_parking_row, 16, safe_value(row.get('renewal_fee')))
-            write_to_merged_cell(ws, car_parking_row, 18, safe_value(row.get('renewal_office_fee')))
+            write_to_merged_cell(ws, car_parking_row, 10, parking_fee if parking_fee != 0 else None)
+            write_to_merged_cell(ws, car_parking_row, 11, safe_value(row.get('parking_fee_tax')))
+            write_to_merged_cell(ws, car_parking_row, 13, safe_value(row.get('security_deposit_incl_tax')))
+            write_to_merged_cell(ws, car_parking_row, 14, safe_value(row.get('key_money_incl_tax')))
+            write_to_merged_cell(ws, car_parking_row, 15, safe_value(row.get('renewal_fee')))
+            write_to_merged_cell(ws, car_parking_row, 16, safe_value(row.get('renewal_office_fee')))
             write_to_merged_cell(ws, car_parking_row, 17, safe_value(row.get('renewal_office_fee_tax')))
             car_parking_row += 1
 
     # 余った駐車場の行を非表示にする
-    for row in range(car_parking_row, car_parking_end_row + 1 + added_car_rows):
+    for row in range(car_parking_row, car_parking_end_row + 1):
         ws.row_dimensions[row].hidden = True
 
     # バイク置き場の情報を書き込む
-    motorbike_parking_start_row = 67 + added_room_rows + added_car_rows  # 部屋と車の追加行数を考慮
-    motorbike_parking_end_row = 75 + added_room_rows + added_car_rows  # テンプレートの元の終了行 + 部屋と車の追加行数
+    motorbike_parking_start_row = 157
+    motorbike_parking_end_row = 196
     motorbike_parking_row = motorbike_parking_start_row
-    added_motorbike_rows = 0  # 追加された行数を追跡
 
     for row in parking_data:
-        if row.get('parking_type') == 'motorbike':
-            if motorbike_parking_row > motorbike_parking_end_row:
-                insert_row(ws, current_row)
-                added_motorbike_rows += 1
-
+        if row.get('parking_type') == 'motorbike' and motorbike_parking_row <= motorbike_parking_end_row:
             write_to_merged_cell(ws, motorbike_parking_row, 1, safe_value(row.get('parking_space_number')))
-            write_to_merged_cell(ws, car_parking_row, 3, '駐車場')
-            write_to_merged_cell(ws, motorbike_parking_row, 6, safe_value(row.get('applicant_name')))
-            write_to_merged_cell(ws, motorbike_parking_row, 7, safe_value(row.get('contract_type')))
-            write_to_merged_cell(ws, motorbike_parking_row, 8, safe_value(row.get('start_date')))
-            write_to_merged_cell(ws, motorbike_parking_row, 9, safe_value(row.get('lease_start_date')))
-            write_to_merged_cell(ws, motorbike_parking_row, 10, safe_value(row.get('lease_end_date')))
+            write_to_merged_cell(ws, motorbike_parking_row, 2, 'バイク置き場')
+            write_to_merged_cell(ws, motorbike_parking_row, 3, safe_value(row.get('applicant_name')))
+            write_to_merged_cell(ws, motorbike_parking_row, 6, safe_value(row.get('contract_type')))
+            write_to_merged_cell(ws, motorbike_parking_row, 7, safe_value(row.get('start_date')))
+            write_to_merged_cell(ws, motorbike_parking_row, 8, safe_value(row.get('lease_start_date')))
+            write_to_merged_cell(ws, motorbike_parking_row, 9, safe_value(row.get('lease_end_date')))
             motorcycle_fee = safe_value(row.get('motorcycle_parking_fee_excl_tax'), 0)
-            write_to_merged_cell(ws, motorbike_parking_row, 11, motorcycle_fee if motorcycle_fee != 0 else None)
-            write_to_merged_cell(ws, motorbike_parking_row, 12, safe_value(row.get('motorcycle_parking_fee_tax')))
-            write_to_merged_cell(ws, motorbike_parking_row, 14, safe_value(row.get('security_deposit_incl_tax')))
-            write_to_merged_cell(ws, motorbike_parking_row, 15, safe_value(row.get('key_money_incl_tax')))
-            write_to_merged_cell(ws, motorbike_parking_row, 16, safe_value(row.get('renewal_fee')))
-            write_to_merged_cell(ws, motorbike_parking_row, 17, safe_value(row.get('renewal_office_fee')))
-            write_to_merged_cell(ws, motorbike_parking_row, 18, safe_value(row.get('renewal_office_fee_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 10, motorcycle_fee if motorcycle_fee != 0 else None)
+            write_to_merged_cell(ws, motorbike_parking_row, 11, safe_value(row.get('motorcycle_parking_fee_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 13, safe_value(row.get('security_deposit_incl_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 14, safe_value(row.get('key_money_incl_tax')))
+            write_to_merged_cell(ws, motorbike_parking_row, 15, safe_value(row.get('renewal_fee')))
+            write_to_merged_cell(ws, motorbike_parking_row, 16, safe_value(row.get('renewal_office_fee')))
+            write_to_merged_cell(ws, motorbike_parking_row, 17, safe_value(row.get('renewal_office_fee_tax')))
             motorbike_parking_row += 1
 
     # 余ったバイク置き場の行を非表示にする
-    for row in range(motorbike_parking_row, motorbike_parking_end_row + 1 + added_motorbike_rows):
+    for row in range(motorbike_parking_row, motorbike_parking_end_row + 1):
         ws.row_dimensions[row].hidden = True
 
     # 出力ファイル名
