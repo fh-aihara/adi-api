@@ -335,6 +335,8 @@ def get_suitotyo(params: SuitotyoParams):
             `入金日` between "{params.start_date}" and "{params.end_date}"
             AND `口座` = "{params.account}"
         """
+
+        print(suitotyo_sql)
         
         # クエリの実行
         query_job = client.query(suitotyo_sql)
@@ -363,6 +365,8 @@ def get_hosyo_kaisya_unmatch(params: HosyoKaisyaParams):
             OR `解約日2` between "{params.start_date}" and "{params.end_date}"
             OR `解約日3` between "{params.start_date}" and "{params.end_date}"
         """
+
+        print(hosyo_sql)
         
         # クエリの実行
         query_job = client.query(hosyo_sql)
