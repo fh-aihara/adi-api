@@ -319,9 +319,9 @@ class SuitotyoParams(BaseModel):
     account: str
 
 class HosyoKaisyaParams(BaseModel):
-    start_date: str
-    end_date: str
-
+   account_year: int 
+   account_month: int
+   
 @router.post('/gcp/suitotyo')
 def get_suitotyo(params: SuitotyoParams):
     try:
@@ -351,32 +351,28 @@ def get_suitotyo(params: SuitotyoParams):
         print(e)
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @router.post('/gcp/hosyo-kaisya-unmatch')
 def get_hosyo_kaisya_unmatch(params: HosyoKaisyaParams):
-    try:
-        # 保証会社未マッチリストのクエリ
-        hosyo_sql = f"""
-        SELECT
-            *
-        FROM
-            `ard-itandi-production.shared_ard_adi_view.hosyo_kaisya_matchlist`
-        WHERE
-            `解約日1` between "{params.start_date}" and "{params.end_date}"
-            OR `解約日2` between "{params.start_date}" and "{params.end_date}"
-            OR `解約日3` between "{params.start_date}" and "{params.end_date}"
-        """
+   try:
+       hosyo_sql = f"""
+       SELECT
+           *
+       FROM
+           `ard-itandi-production.shared_ard_adi_view.hosyo_kaisya_matchlist` 
+       WHERE
+           account_year = {params.account_year}
+           AND account_month = {params.account_month}
+       """
 
-        print(hosyo_sql)
-        
-        # クエリの実行
-        query_job = client.query(hosyo_sql)
-        results = query_job.result()
-        
-        # 結果の整形
-        rows = [dict(row) for row in results]
-        
-        return {"results": rows}
-        
-    except (GoogleAPICallError, NotFound) as e:
-        print(e)
-        raise HTTPException(status_code=400, detail=str(e))
+       print(hosyo_sql)
+       
+       query_job = client.query(hosyo_sql)
+       results = query_job.result()
+
+       rows = [dict(row) for row in results]
+       return {"results": rows}
+       
+   except (GoogleAPICallError, NotFound) as e:
+       print(e)
+       raise HTTPException(status_code=400, detail=str(e))
