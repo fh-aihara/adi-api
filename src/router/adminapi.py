@@ -44,17 +44,23 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # ログミドルウェア
+# ログミドルウェア
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # リクエストボディを取得 (非同期)
         body = None
         if request.method in ["POST", "PUT"]:
-            body_bytes = await request.body()
-            if body_bytes:
-                try:
-                    body = json.loads(body_bytes.decode())
-                except:
-                    body = "(non-JSON payload)"
+            try:
+                body_bytes = await request.body()
+                if body_bytes:
+                    try:
+                        body = json.loads(body_bytes.decode())
+                    except:
+                        body = "(non-JSON payload)"
+                # リクエストボディを再設定（他のミドルウェアやエンドポイントで使用できるようにする）
+                await request._receive()
+            except:
+                body = "(body not available)"
         
         # リクエストパスを取得
         path = request.url.path
@@ -77,7 +83,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # リクエスト処理を続行
         response = await call_next(request)
         return response
-
+    
 # セッションを取得するための依存関係
 def get_session():
     with Session(engine) as session:

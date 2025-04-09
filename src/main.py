@@ -2,7 +2,7 @@ from fastapi import FastAPI, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from router import adminapi
 import router
-from router import LoggingMiddleware  # ログミドルウェアをインポート
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 import uvicorn
 import requests
