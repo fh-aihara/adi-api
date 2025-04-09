@@ -1,10 +1,9 @@
 from base64 import decode
 from lib2to3.pgen2 import token
-from fastapi import APIRouter, Header, Depends, HTTPException, status, Response, UploadFile
+from fastapi import APIRouter, Header, Depends, HTTPException, status, Response, UploadFile, Request
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
-from fastapi.middleware.base import BaseHTTPMiddleware
 from models import query_histroy
 from sqlalchemy import null
 from sqlmodel import Field, SQLModel, create_engine, Session, select, literal_column, table, desc
@@ -39,58 +38,68 @@ handler = RotatingFileHandler(
     maxBytes=10485760,  # 10MB
     backupCount=10
 )
-formatter = logging.Formatter('%(asctime)s,%(message)s')
+formatter = logging.Formatter('%(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-# ログミドルウェア
-# ログミドルウェア
-class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # リクエストボディを取得 (非同期)
-        body = None
-        if request.method in ["POST", "PUT"]:
-            try:
-                body_bytes = await request.body()
-                if body_bytes:
-                    try:
-                        body = json.loads(body_bytes.decode())
-                    except:
-                        body = "(non-JSON payload)"
-                # リクエストボディを再設定（他のミドルウェアやエンドポイントで使用できるようにする）
-                await request._receive()
-            except:
-                body = "(body not available)"
-        
-        # リクエストパスを取得
-        path = request.url.path
-        # ユーザーIDを取得（ヘッダーにない場合は "unknown"）
-        user_id = request.headers.get("X-User-ID", "unknown")
-        
-        # クエリパラメータがあれば取得
-        query_params = dict(request.query_params)
-        
-        # パラメータ情報（ボディとクエリの両方）
-        params = ""
-        if body:
-            params = f"{json.dumps(body)}"
-        if query_params:
-            params += f"{json.dumps(query_params)}"
-        
-        # ログ出力
-        logger.info(f"{user_id},{path},{params}")
-        
-        # リクエスト処理を続行
-        response = await call_next(request)
-        return response
+# ログを記録する依存関係関数
+async def log_request(request: Request):
+    # 現在時刻を取得
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    # ユーザーIDを取得（ヘッダーにない場合は "unknown"）
+    user_id = request.headers.get("X-User-ID", "unknown")
+    
+    # エンドポイントのパス
+    path = request.url.path
+    
+    # リクエストパラメータを取得
+    params = ""
+    
+    # GETパラメータを取得
+    query_params = dict(request.query_params)
+    if query_params:
+        params += json.dumps(query_params)
+    
+    # POSTボディを取得（可能な場合）
+    if request.method in ["POST", "PUT"]:
+        try:
+            # リクエストのボディを複製して内容を確認する
+            body_bytes = await request.body()
+            
+            # ボディがあれば処理する
+            if body_bytes:
+                try:
+                    body = json.loads(body_bytes.decode())
+                    if params:
+                        params += " "
+                    params += json.dumps(body)
+                except:
+                    if params:
+                        params += " "
+                    params += "(non-JSON payload)"
+            
+            # リクエストボディを再度利用可能にする (FastAPIの内部メカニズム)
+            request._body = body_bytes
+        except:
+            if params:
+                params += " "
+            params += "(body not available)"
+    
+    # ログ出力 - カンマ区切りのフォーマット
+    log_message = f"{timestamp},{user_id},{path},{params}"
+    logger.info(log_message)
+    
+    # 依存関係関数なので何も返さなくてOK
+    return
+
 # セッションを取得するための依存関係
 def get_session():
     with Session(engine) as session:
         yield session
 
-# router定義
-router = APIRouter()
+# router定義 - すべてのエンドポイントにログ依存関係を適用
+router = APIRouter(dependencies=[Depends(log_request)])
 
 class SQLQuery(BaseModel):
     sql: str
@@ -456,4 +465,3 @@ def get_hosyo_kaisya_unmatch(params: HosyoKaisyaParams):
    except (GoogleAPICallError, NotFound) as e:
        print(e)
        raise HTTPException(status_code=400, detail=str(e))
-

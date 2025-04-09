@@ -2,7 +2,6 @@ from fastapi import FastAPI, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from router import adminapi
 import router
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 import uvicorn
 import requests
@@ -23,9 +22,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ユーザーアクティビティログミドルウェアを追加
-app.add_middleware(LoggingMiddleware)
 
 app.include_router(adminapi.router, prefix="/api")
 
