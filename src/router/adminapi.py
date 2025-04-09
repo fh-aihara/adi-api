@@ -110,14 +110,35 @@ def login(item: dict):
         print(item)
         username = item["username"]
         password = item["password"]
-        # if username == "adi2024" and password == "tc8UYHLT":
+        
+        # Original account - full access
         if username == "adi2024" and password == "adi2024":
-            return "SUCCESS"
+            return {
+                "message": "success",
+                "auth": {
+                    "rentroll": True,
+                    "keiri": True
+                }
+            }
+        # New account - limited access
+        elif username == "adirent2025" and password == "adirent2025":
+            return {
+                "message": "success",
+                "auth": {
+                    "rentroll": True,
+                    "keiri": False
+                }
+            }
         else:
-            return "WRONG"
+            return {
+                "message": "wrong",
+                "auth": None
+            }
     except:
-        return "ERROR"
-    
+        return {
+            "message": "error",
+            "auth": None
+        }    
 
 @router.post('/gcp/rentroll')
 def post_query(item: dict):
