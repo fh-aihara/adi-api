@@ -4,6 +4,7 @@ from fastapi import APIRouter, Header, Depends, HTTPException, status, Response,
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
+from fastapi.middleware.base import BaseHTTPMiddleware
 from models import query_histroy
 from sqlalchemy import null
 from sqlmodel import Field, SQLModel, create_engine, Session, select, literal_column, table, desc
@@ -23,9 +24,59 @@ from pydantic import BaseModel
 import pandas as pd
 import openpyxl
 from copy import copy
+import json
+import logging
+from logging.handlers import RotatingFileHandler
 
 
 DATABASE = 'bq_query.db'
+
+# ログ設定
+logger = logging.getLogger("user_activity")
+logger.setLevel(logging.INFO)
+handler = RotatingFileHandler(
+    "user_activity.log",
+    maxBytes=10485760,  # 10MB
+    backupCount=10
+)
+formatter = logging.Formatter('%(asctime)s,%(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+# ログミドルウェア
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # リクエストボディを取得 (非同期)
+        body = None
+        if request.method in ["POST", "PUT"]:
+            body_bytes = await request.body()
+            if body_bytes:
+                try:
+                    body = json.loads(body_bytes.decode())
+                except:
+                    body = "(non-JSON payload)"
+        
+        # リクエストパスを取得
+        path = request.url.path
+        # ユーザーIDを取得（ヘッダーにない場合は "unknown"）
+        user_id = request.headers.get("X-User-ID", "unknown")
+        
+        # クエリパラメータがあれば取得
+        query_params = dict(request.query_params)
+        
+        # パラメータ情報（ボディとクエリの両方）
+        params = ""
+        if body:
+            params = f"{json.dumps(body)}"
+        if query_params:
+            params += f"{json.dumps(query_params)}"
+        
+        # ログ出力
+        logger.info(f"{user_id},{path},{params}")
+        
+        # リクエスト処理を続行
+        response = await call_next(request)
+        return response
 
 # セッションを取得するための依存関係
 def get_session():
@@ -118,7 +169,8 @@ def login(item: dict):
                 "auth": {
                     "rentroll": True,
                     "keiri": True
-                }
+                },
+                "user_id" : 1
             }
         # New account - limited access
         elif username == "adirent2025" and password == "adirent2025":
@@ -127,7 +179,8 @@ def login(item: dict):
                 "auth": {
                     "rentroll": True,
                     "keiri": False
-                }
+                },
+                "user_id" : 2
             }
         else:
             return {
@@ -397,3 +450,4 @@ def get_hosyo_kaisya_unmatch(params: HosyoKaisyaParams):
    except (GoogleAPICallError, NotFound) as e:
        print(e)
        raise HTTPException(status_code=400, detail=str(e))
+

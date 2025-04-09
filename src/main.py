@@ -2,6 +2,7 @@ from fastapi import FastAPI, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from router import adminapi
 import router
+from router import LoggingMiddleware  # ログミドルウェアをインポート
 from starlette.responses import Response
 import uvicorn
 import requests
@@ -23,10 +24,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ユーザーアクティビティログミドルウェアを追加
+app.add_middleware(LoggingMiddleware)
+
 app.include_router(adminapi.router, prefix="/api")
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, log_level="info" ,reload=True)
-
-
-
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, log_level="info", reload=True)
