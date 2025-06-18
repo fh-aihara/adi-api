@@ -488,7 +488,7 @@ def export_to_pallet_cloud():
             "PC_tenants_output": f"{today}_PC_tenants",
             "PC_contract2": f"{today}_PC_contract2",
             "PC_contract_tenant": f"{today}_PC_contract_tenant",
-            "PC_buildings_contract_resident": f"{today}_PC_contract_resident"
+            "PC_contract_resident": f"{today}_PC_contract_resident"
         }
         
         results = {}
