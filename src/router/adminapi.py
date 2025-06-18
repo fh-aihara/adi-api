@@ -26,6 +26,8 @@ from copy import copy
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+import boto3
+import io
 
 
 DATABASE = 'bq_query.db'
@@ -465,3 +467,71 @@ def get_hosyo_kaisya_unmatch(params: HosyoKaisyaParams):
    except (GoogleAPICallError, NotFound) as e:
        print(e)
        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post('/gcp/pallet-cloud')
+def export_to_pallet_cloud():
+    try:
+        # 現在の日付をyyyymmdd形式で取得
+        today = datetime.datetime.now().strftime("%Y%m%d")
+        
+        # 出力先のS3バケットとプレフィックス
+        bucket_name = "adi-external-integration"
+        prefix = "pallet-cloud/prod/"
+        
+        # S3クライアントの初期化
+        s3_client = boto3.client('s3')
+        
+        # エクスポートするテーブルとファイル名のマッピング
+        table_file_mapping = {
+            "PC_buildings_output": f"{today}_PC_buildings",
+            "PC_rooms_output": f"{today}_PC_rooms",
+            "PC_tenants_output": f"{today}_PC_tenants",
+            "PC_contract2": f"{today}_PC_contract2",
+            "PC_contract_tenant": f"{today}_PC_contract_tenant",
+            "PC_buildings_contract_resident": f"{today}_PC_contract_resident"
+        }
+        
+        results = {}
+        
+        # 各テーブルのデータをクエリしてS3にエクスポート
+        for table_name, file_name in table_file_mapping.items():
+            # BigQueryからデータを取得
+            query = f"""
+            SELECT *
+            FROM `ard-itandi-production.shared_ard_adi_view.{table_name}`
+            """
+            
+            query_job = client.query(query)
+            df = query_job.to_dataframe()
+            
+            # DataFrameをCSVに変換 (UTF-8エンコーディングを指定)
+            csv_buffer = io.StringIO()
+            df.to_csv(csv_buffer, index=False)
+            
+            # S3にアップロード (UTF-8エンコーディングを明示的に指定)
+            s3_key = f"{prefix}{file_name}.csv"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=s3_key,
+                Body=csv_buffer.getvalue().encode('utf-8'),
+                ContentType='text/csv; charset=utf-8'
+            )
+            
+            results[table_name] = {
+                "status": "success",
+                "rows": len(df),
+                "destination": f"s3://{bucket_name}/{s3_key}"
+            }
+        
+        return {
+            "message": "データのエクスポートが完了しました",
+            "date": today,
+            "results": results
+        }
+        
+    except (GoogleAPICallError, NotFound) as e:
+        print(f"BigQuery Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
