@@ -614,13 +614,20 @@ def building_diff():
             # 4. 差分ファイルを作成（今日にしかない行 + 変更された行）
             diff_df = pd.concat([only_in_today, changed_rows])
             
-            # 出力ディレクトリが存在しない場合は作成
-            output_dir = "./output"
-            os.makedirs(output_dir, exist_ok=True)
+            # 差分ファイルをCSVに変換
+            csv_buffer = io.StringIO()
+            diff_df.to_csv(csv_buffer, index=False)
             
-            # 差分ファイルを保存
-            output_file = f"{output_dir}/buildings.csv"
-            diff_df.to_csv(output_file, index=False, encoding='utf-8')
+            # S3に出力（UTF-8エンコーディングを明示的に指定）
+            output_s3_key = f"{prefix}output/buildings.csv"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=output_s3_key,
+                Body=csv_buffer.getvalue().encode('utf-8'),
+                ContentType='text/csv; charset=utf-8'
+            )
+            
+            output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
             
             return {
                 "message": "建物ファイルの差分計算が完了しました",
@@ -631,7 +638,7 @@ def building_diff():
                 "new_rows": len(only_in_today),
                 "changed_rows": len(changed_rows),
                 "diff_rows": len(diff_df),
-                "output_file": output_file
+                "output_file": output_s3_path
             }
         else:
             raise HTTPException(status_code=400, detail="ファイルにカラムがありません")
