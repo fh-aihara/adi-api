@@ -536,6 +536,120 @@ def export_to_pallet_cloud():
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post('/gcp/pallet-cloud/rooms-diff')
+def rooms_diff():
+    try:
+        # 現在の日付と前日の日付をyyyymmdd形式で取得
+        today = datetime.datetime.now()
+        yesterday = today - datetime.timedelta(days=1)
+        today_str = today.strftime("%Y%m%d")
+        yesterday_str = yesterday.strftime("%Y%m%d")
+        
+        # S3バケットとプレフィックス
+        bucket_name = "adi-external-integration"
+        prefix = "pallet-cloud/prod/"
+        
+        # 今日と昨日のファイルパス
+        today_file = f"{today_str}_PC_rooms.csv"
+        yesterday_file = f"{yesterday_str}_PC_rooms.csv"
+        
+        today_s3_path = f"{prefix}{today_file}"
+        yesterday_s3_path = f"{prefix}{yesterday_file}"
+        
+        # S3クライアントの初期化
+        s3_client = boto3.client('s3')
+        
+        # 一時ファイルパス
+        temp_today_file = f"/tmp/{today_file}"
+        temp_yesterday_file = f"/tmp/{yesterday_file}"
+        
+        # S3からファイルをダウンロード
+        try:
+            s3_client.download_file(bucket_name, today_s3_path, temp_today_file)
+            print(f"Downloaded today's file from s3://{bucket_name}/{today_s3_path}")
+        except Exception as e:
+            print(f"Error downloading today's file: {e}")
+            raise HTTPException(status_code=404, detail=f"Today's file not found: {today_file}")
+            
+        try:
+            s3_client.download_file(bucket_name, yesterday_s3_path, temp_yesterday_file)
+            print(f"Downloaded yesterday's file from s3://{bucket_name}/{yesterday_s3_path}")
+        except Exception as e:
+            print(f"Error downloading yesterday's file: {e}")
+            raise HTTPException(status_code=404, detail=f"Yesterday's file not found: {yesterday_file}")
+        
+        # CSVファイルをDataFrameに読み込む
+        today_df = pd.read_csv(temp_today_file, encoding='utf-8')
+        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8')
+        
+        print(f"Today's file has {len(today_df)} rows")
+        print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 主キーを特定（32番目のカラムを主キーとする）
+        if len(today_df.columns) > 31:  # 0-indexedなので31が32番目
+            primary_key = today_df.columns[31]
+            
+            # 差分を計算
+            # 1. 今日のファイルにしかない行を抽出
+            only_in_today = today_df[~today_df[primary_key].isin(yesterday_df[primary_key])]
+            
+            # 2. 両方のファイルに存在する行を抽出
+            common_keys = today_df[today_df[primary_key].isin(yesterday_df[primary_key])][primary_key]
+            
+            # 3. 共通のキーを持つが値が異なる行を抽出
+            diff_rows = []
+            for key in common_keys:
+                today_row = today_df[today_df[primary_key] == key]
+                yesterday_row = yesterday_df[yesterday_df[primary_key] == key]
+                
+                # 行の値を比較
+                if not today_row.equals(yesterday_row):
+                    diff_rows.append(today_row)
+            
+            if diff_rows:
+                changed_rows = pd.concat(diff_rows)
+            else:
+                changed_rows = pd.DataFrame(columns=today_df.columns)
+            
+            # 4. 差分ファイルを作成（今日にしかない行 + 変更された行）
+            diff_df = pd.concat([only_in_today, changed_rows])
+            
+            # 差分ファイルをCSVに変換
+            csv_buffer = io.StringIO()
+            diff_df.to_csv(csv_buffer, index=False)
+            
+            # S3に出力（UTF-8エンコーディングを明示的に指定）
+            output_s3_key = f"{prefix}output/rooms.csv"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=output_s3_key,
+                Body=csv_buffer.getvalue().encode('utf-8'),
+                ContentType='text/csv; charset=utf-8'
+            )
+            
+            output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
+            
+            return {
+                "message": "部屋ファイルの差分計算が完了しました",
+                "today_date": today_str,
+                "yesterday_date": yesterday_str,
+                "total_rows_today": len(today_df),
+                "total_rows_yesterday": len(yesterday_df),
+                "new_rows": len(only_in_today),
+                "changed_rows": len(changed_rows),
+                "diff_rows": len(diff_df),
+                "output_file": output_s3_path
+            }
+        else:
+            raise HTTPException(status_code=400, detail="ファイルに32番目のカラムがありません")
+            
+    except (GoogleAPICallError, NotFound) as e:
+        print(f"BigQuery Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post('/gcp/pallet-cloud/building-diff')
 def building_diff():
     try:
