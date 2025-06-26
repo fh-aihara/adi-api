@@ -32,6 +32,10 @@ import io
 
 DATABASE = 'bq_query.db'
 
+# Logic Apps Workflow URL
+LOGIC_APPS_WEBHOOK_URL = "https://prod-02.japaneast.logic.azure.com:443/workflows/38314c48bb6b416a96ced12643cea29c/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=5DJlT6fyzTBMZ1yYi4K75CgmLcDUKrDeFihlifNhUQY"
+
+
 # ログ設定
 logger = logging.getLogger("user_activity")
 logger.setLevel(logging.INFO)
@@ -105,6 +109,36 @@ router = APIRouter(dependencies=[Depends(log_request)])
 
 class SQLQuery(BaseModel):
     sql: str
+
+
+def send_webhook_notification(title, status, details, success=True):
+    """
+    Logic Apps Workflowにwebhook通知を送信
+    """
+    try:
+        payload = {
+            "title": title,
+            "status": status,
+            "success": success,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "details": details,
+            "source": "Pallet Cloud Export API"
+        }
+        
+        response = requests.post(
+            LOGIC_APPS_WEBHOOK_URL,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            timeout=30
+        )
+        
+        print(f"Webhook sent successfully. Status: {response.status_code}")
+        return True
+        
+    except Exception as e:
+        print(f"Failed to send webhook: {str(e)}")
+        return False
+    
 
 @router.post('/gcp/query')
 def post_query(query: SQLQuery, session: Session = Depends(get_session)):
@@ -470,10 +504,9 @@ def get_hosyo_kaisya_unmatch(params: HosyoKaisyaParams):
 
 @router.post('/gcp/pallet-cloud')
 def export_to_pallet_cloud():
+    today = datetime.datetime.now().strftime("%Y%m%d")
+    
     try:
-        # 現在の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now().strftime("%Y%m%d")
-        
         # 出力先のS3バケットとプレフィックス
         bucket_name = "adi-external-integration"
         prefix = "pallet-cloud/prod/"
@@ -492,48 +525,134 @@ def export_to_pallet_cloud():
         }
         
         results = {}
+        total_rows = 0
         
         # 各テーブルのデータをクエリしてS3にエクスポート
         for table_name, file_name in table_file_mapping.items():
-            # BigQueryからデータを取得
-            query = f"""
-            SELECT *
-            FROM `ard-itandi-production.shared_ard_adi_view.{table_name}`
-            """
-            
-            query_job = client.query(query)
-            df = query_job.to_dataframe()
-            
-            # DataFrameをCSVに変換 (UTF-8エンコーディングを指定)
-            csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False)
-            
-            # S3にアップロード (UTF-8エンコーディングを明示的に指定)
-            s3_key = f"{prefix}{file_name}.csv"
-            s3_client.put_object(
-                Bucket=bucket_name,
-                Key=s3_key,
-                Body=csv_buffer.getvalue().encode('utf-8'),
-                ContentType='text/csv; charset=utf-8'
-            )
-            
-            results[table_name] = {
-                "status": "success",
-                "rows": len(df),
-                "destination": f"s3://{bucket_name}/{s3_key}"
-            }
+            try:
+                print(f"Processing table: {table_name}")
+                
+                # BigQueryからデータを取得
+                query = f"""
+                SELECT *
+                FROM `ard-itandi-production.shared_ard_adi_view.{table_name}`
+                """
+                
+                query_job = client.query(query)
+                df = query_job.to_dataframe()
+                
+                # DataFrameをCSVに変換 (UTF-8エンコーディングを指定)
+                csv_buffer = io.StringIO()
+                df.to_csv(csv_buffer, index=False)
+                
+                # S3にアップロード (UTF-8エンコーディングを明示的に指定)
+                s3_key = f"{prefix}{file_name}.csv"
+                s3_client.put_object(
+                    Bucket=bucket_name,
+                    Key=s3_key,
+                    Body=csv_buffer.getvalue().encode('utf-8'),
+                    ContentType='text/csv; charset=utf-8'
+                )
+                
+                row_count = len(df)
+                total_rows += row_count
+                
+                results[table_name] = {
+                    "status": "success",
+                    "rows": row_count,
+                    "destination": f"s3://{bucket_name}/{s3_key}"
+                }
+                
+                print(f"Successfully exported {table_name}: {row_count} rows")
+                
+            except Exception as table_error:
+                print(f"Error processing table {table_name}: {str(table_error)}")
+                results[table_name] = {
+                    "status": "error",
+                    "error": str(table_error),
+                    "rows": 0
+                }
+        
+        # 成功時のwebhook通知を送信
+        success_details = {
+            "export_date": today,
+            "total_files": len(table_file_mapping),
+            "total_rows": total_rows,
+            "file_details": [
+                {
+                    "table": table_name,
+                    "filename": f"{table_file_mapping[table_name]}.csv",
+                    "rows": result.get("rows", 0),
+                    "status": result.get("status", "unknown")
+                }
+                for table_name, result in results.items()
+            ],
+            "s3_bucket": bucket_name,
+            "s3_prefix": prefix
+        }
+        
+        # エラーがあったかチェック
+        failed_tables = [table for table, result in results.items() if result.get("status") == "error"]
+        
+        if failed_tables:
+            # 一部失敗した場合
+            webhook_title = "パレットクラウド向けファイル出力 - 一部エラー"
+            webhook_status = f"完了（{len(failed_tables)}件のエラーあり）"
+            success_details["failed_tables"] = failed_tables
+            send_webhook_notification(webhook_title, webhook_status, success_details, success=False)
+        else:
+            # 全て成功した場合
+            webhook_title = "パレットクラウド向けファイル出力 - 完了"
+            webhook_status = f"全{len(table_file_mapping)}ファイル正常出力（計{total_rows:,}件）"
+            send_webhook_notification(webhook_title, webhook_status, success_details, success=True)
         
         return {
             "message": "データのエクスポートが完了しました",
             "date": today,
+            "total_rows": total_rows,
             "results": results
         }
         
     except (GoogleAPICallError, NotFound) as e:
-        print(f"BigQuery Error: {e}")
+        error_message = f"BigQuery Error: {str(e)}"
+        print(error_message)
+        
+        # BigQueryエラー時のwebhook通知
+        error_details = {
+            "export_date": today,
+            "error_type": "BigQuery Error",
+            "error_message": str(e),
+            "tables_attempted": list(table_file_mapping.keys())
+        }
+        
+        send_webhook_notification(
+            "パレットクラウド向けファイル出力 - BigQueryエラー",
+            "BigQueryアクセスに失敗しました",
+            error_details,
+            success=False
+        )
+        
         raise HTTPException(status_code=400, detail=str(e))
+        
     except Exception as e:
-        print(f"Error: {e}")
+        error_message = f"Unexpected Error: {str(e)}"
+        print(error_message)
+        
+        # 予期しないエラー時のwebhook通知
+        error_details = {
+            "export_date": today,
+            "error_type": "Unexpected Error",
+            "error_message": str(e),
+            "tables_attempted": list(table_file_mapping.keys())
+        }
+        
+        send_webhook_notification(
+            "パレットクラウド向けファイル出力 - システムエラー",
+            "予期しないエラーが発生しました",
+            error_details,
+            success=False
+        )
+        
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post('/gcp/pallet-cloud/rooms-diff')
