@@ -5,3 +5,7 @@
 *.csv
 *.tar
 *.gz
+*.txt
+*.log
+*.pid
+*.out
