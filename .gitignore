@@ -2,4 +2,6 @@
 *.json
 *.db
 *.pyc
-
+*.csv
+*.tar
+*.gz

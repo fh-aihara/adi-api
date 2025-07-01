@@ -655,13 +655,20 @@ def export_to_pallet_cloud():
         
         raise HTTPException(status_code=500, detail=str(e))
 
+class DaysAgoParams(BaseModel):
+    days_ago: int = 0
+
 @router.post('/gcp/pallet-cloud/rooms-diff')
-def rooms_diff():
+def rooms_diff(params: DaysAgoParams = None):
     try:
-        # 現在の日付と前日の日付をyyyymmdd形式で取得
+        # パラメータがない場合はデフォルト値を使用
+        days_ago = 0 if params is None else params.days_ago
+        
+        # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
         today = datetime.datetime.now()
-        yesterday = today - datetime.timedelta(days=1)
-        today_str = today.strftime("%Y%m%d")
+        base_date = today - datetime.timedelta(days=days_ago)
+        yesterday = base_date - datetime.timedelta(days=1)
+        today_str = base_date.strftime("%Y%m%d")
         yesterday_str = yesterday.strftime("%Y%m%d")
         
         # S3バケットとプレフィックス
@@ -770,12 +777,16 @@ def rooms_diff():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post('/gcp/pallet-cloud/building-diff')
-def building_diff():
+def building_diff(params: DaysAgoParams = None):
     try:
-        # 現在の日付と前日の日付をyyyymmdd形式で取得
+        # パラメータがない場合はデフォルト値を使用
+        days_ago = 0 if params is None else params.days_ago
+        
+        # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
         today = datetime.datetime.now()
-        yesterday = today - datetime.timedelta(days=1)
-        today_str = today.strftime("%Y%m%d")
+        base_date = today - datetime.timedelta(days=days_ago)
+        yesterday = base_date - datetime.timedelta(days=1)
+        today_str = base_date.strftime("%Y%m%d")
         yesterday_str = yesterday.strftime("%Y%m%d")
         
         # S3バケットとプレフィックス
@@ -882,3 +893,4 @@ def building_diff():
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
