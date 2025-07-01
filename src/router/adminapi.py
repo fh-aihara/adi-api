@@ -850,8 +850,22 @@ def rooms_diff(params: DaysAgoParams = None):
                 else:
                     f.write("No differences found in existing rows.\n")
             
+            # 差分詳細ファイルをS3にもアップロード
+            with open(diff_result_path, 'r', encoding='utf-8') as f:
+                diff_detail_content = f.read()
+            
+            # S3に出力
+            diff_detail_s3_key = f"{prefix}output/room-diff-result.txt"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=diff_detail_s3_key,
+                Body=diff_detail_content.encode('utf-8'),
+                ContentType='text/plain; charset=utf-8'
+            )
+            
             print(f"Saved local file to: {local_file_path}")
             print(f"Saved diff details to: {diff_result_path}")
+            print(f"Uploaded diff details to S3: s3://{bucket_name}/{diff_detail_s3_key}")
             
             output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
             
@@ -1062,8 +1076,22 @@ def contract2_diff(params: DaysAgoParams = None):
                 else:
                     f.write("No differences found in existing rows.\n")
             
+            # 差分詳細ファイルをS3にもアップロード
+            with open(diff_result_path, 'r', encoding='utf-8') as f:
+                diff_detail_content = f.read()
+            
+            # S3に出力
+            diff_detail_s3_key = f"{prefix}output/contract2-diff-result.txt"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=diff_detail_s3_key,
+                Body=diff_detail_content.encode('utf-8'),
+                ContentType='text/plain; charset=utf-8'
+            )
+            
             print(f"Saved local file to: {local_file_path}")
             print(f"Saved diff details to: {diff_result_path}")
+            print(f"Uploaded diff details to S3: s3://{bucket_name}/{diff_detail_s3_key}")
             
             output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
             
@@ -1276,8 +1304,22 @@ def building_diff(params: DaysAgoParams = None):
                 else:
                     f.write("No differences found in existing rows.\n")
             
+            # 差分詳細ファイルをS3にもアップロード
+            with open(diff_result_path, 'r', encoding='utf-8') as f:
+                diff_detail_content = f.read()
+            
+            # S3に出力
+            diff_detail_s3_key = f"{prefix}output/building-diff-result.txt"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=diff_detail_s3_key,
+                Body=diff_detail_content.encode('utf-8'),
+                ContentType='text/plain; charset=utf-8'
+            )
+            
             print(f"Saved local file to: {local_file_path}")
             print(f"Saved diff details to: {diff_result_path}")
+            print(f"Uploaded diff details to S3: s3://{bucket_name}/{diff_detail_s3_key}")
             
             output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
             
