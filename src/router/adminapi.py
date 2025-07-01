@@ -743,6 +743,10 @@ def rooms_diff(params: DaysAgoParams = None):
                     today_val = today_row[col].iloc[0]
                     yesterday_val = yesterday_row[col].iloc[0]
                     
+                    # 両方がNaNの場合は差分なしとする
+                    if pd.isna(today_val) and pd.isna(yesterday_val):
+                        continue
+                    
                     # 数値型の場合は差分が1以上あるかチェック
                     if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
                         if pd.notna(today_val) and pd.notna(yesterday_val):
@@ -893,6 +897,10 @@ def contract2_diff(params: DaysAgoParams = None):
                 for col in today_row.columns:
                     today_val = today_row[col].iloc[0]
                     yesterday_val = yesterday_row[col].iloc[0]
+                    
+                    # 両方がNaNの場合は差分なしとする
+                    if pd.isna(today_val) and pd.isna(yesterday_val):
+                        continue
                     
                     # 数値型の場合は差分が1以上あるかチェック
                     if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
@@ -1053,6 +1061,10 @@ def building_diff(params: DaysAgoParams = None):
                         
                     today_val = today_row[col].iloc[0]
                     yesterday_val = yesterday_row[col].iloc[0]
+                    
+                    # 両方がNaNの場合は差分なしとする
+                    if pd.isna(today_val) and pd.isna(yesterday_val):
+                        continue
                     
                     # 数値型の場合は差分が1以上あるかチェック
                     if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
