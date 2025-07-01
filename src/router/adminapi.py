@@ -1032,12 +1032,15 @@ def building_diff(params: DaysAgoParams = None):
             
             # 3. 共通のキーを持つが値が異なる行を抽出
             diff_rows = []
+            diff_details = []  # 差分の詳細を記録するリスト
+            
             for key in common_keys:
                 today_row = today_df[today_df[primary_key] == key]
                 yesterday_row = yesterday_df[yesterday_df[primary_key] == key]
                 
                 # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
                 is_different = False
+                row_diff_details = []  # この行の差分詳細
                 
                 # 比較から除外するカラム（インデックス）
                 exclude_indices = [60, 61]
@@ -1054,19 +1057,40 @@ def building_diff(params: DaysAgoParams = None):
                     # 数値型の場合は差分が1以上あるかチェック
                     if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
                         if pd.notna(today_val) and pd.notna(yesterday_val):
-                            if abs(float(today_val) - float(yesterday_val)) >= 1:
+                            diff_value = abs(float(today_val) - float(yesterday_val))
+                            if diff_value >= 1:
                                 is_different = True
-                                break
+                                row_diff_details.append({
+                                    "column": col,
+                                    "today_value": today_val,
+                                    "yesterday_value": yesterday_val,
+                                    "difference": diff_value
+                                })
                         elif pd.notna(today_val) != pd.notna(yesterday_val):  # 片方がNaNの場合
                             is_different = True
-                            break
+                            row_diff_details.append({
+                                "column": col,
+                                "today_value": "NaN" if pd.isna(today_val) else today_val,
+                                "yesterday_value": "NaN" if pd.isna(yesterday_val) else yesterday_val,
+                                "difference": "NaN comparison"
+                            })
                     # 数値型以外は完全一致でチェック
                     elif today_val != yesterday_val:
                         is_different = True
-                        break
+                        row_diff_details.append({
+                            "column": col,
+                            "today_value": today_val,
+                            "yesterday_value": yesterday_val,
+                            "difference": "String difference"
+                        })
                 
                 if is_different:
                     diff_rows.append(today_row)
+                    # キーと差分詳細を記録
+                    diff_details.append({
+                        "key": key,
+                        "differences": row_diff_details
+                    })
             
             if diff_rows:
                 changed_rows = pd.concat(diff_rows)
@@ -1098,7 +1122,36 @@ def building_diff(params: DaysAgoParams = None):
             with open(local_file_path, 'w', encoding='utf-8') as f:
                 f.write(csv_buffer.getvalue())
             
+            # 差分詳細をテキストファイルに出力
+            diff_result_path = f"{local_dir}/building-diff-result.txt"
+            with open(diff_result_path, 'w', encoding='utf-8') as f:
+                f.write(f"Building Diff Results - {today_str} vs {yesterday_str}\n")
+                f.write(f"Total rows in today's file: {len(today_df)}\n")
+                f.write(f"Total rows in yesterday's file: {len(yesterday_df)}\n")
+                f.write(f"New rows (only in today's file): {len(only_in_today)}\n")
+                f.write(f"Changed rows: {len(changed_rows)}\n\n")
+                
+                if len(only_in_today) > 0:
+                    f.write("=== NEW ROWS ===\n")
+                    for _, row in only_in_today.iterrows():
+                        f.write(f"New row with key: {row[primary_key]}\n")
+                    f.write("\n")
+                
+                if len(diff_details) > 0:
+                    f.write("=== CHANGED ROWS ===\n")
+                    for row_diff in diff_details:
+                        f.write(f"Row with key '{row_diff['key']}' has the following differences:\n")
+                        for diff in row_diff['differences']:
+                            f.write(f"  Column '{diff['column']}':\n")
+                            f.write(f"    Today's value: {diff['today_value']}\n")
+                            f.write(f"    Yesterday's value: {diff['yesterday_value']}\n")
+                            f.write(f"    Difference: {diff['difference']}\n")
+                        f.write("\n")
+                else:
+                    f.write("No differences found in existing rows.\n")
+            
             print(f"Saved local file to: {local_file_path}")
+            print(f"Saved diff details to: {diff_result_path}")
             
             output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
             
