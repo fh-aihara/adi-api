@@ -728,8 +728,29 @@ def rooms_diff(params: DaysAgoParams = None):
                 today_row = today_df[today_df[primary_key] == key]
                 yesterday_row = yesterday_df[yesterday_df[primary_key] == key]
                 
-                # 行の値を比較
-                if not today_row.equals(yesterday_row):
+                # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
+                is_different = False
+                
+                # 各カラムを比較
+                for col in today_row.columns:
+                    today_val = today_row[col].iloc[0]
+                    yesterday_val = yesterday_row[col].iloc[0]
+                    
+                    # 数値型の場合は差分が1以上あるかチェック
+                    if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
+                        if pd.notna(today_val) and pd.notna(yesterday_val):
+                            if abs(float(today_val) - float(yesterday_val)) >= 1:
+                                is_different = True
+                                break
+                        elif pd.notna(today_val) != pd.notna(yesterday_val):  # 片方がNaNの場合
+                            is_different = True
+                            break
+                    # 数値型以外は完全一致でチェック
+                    elif today_val != yesterday_val:
+                        is_different = True
+                        break
+                
+                if is_different:
                     diff_rows.append(today_row)
             
             if diff_rows:
@@ -858,8 +879,29 @@ def contract2_diff(params: DaysAgoParams = None):
                 today_row = today_df[today_df[primary_key] == key]
                 yesterday_row = yesterday_df[yesterday_df[primary_key] == key]
                 
-                # 行の値を比較
-                if not today_row.equals(yesterday_row):
+                # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
+                is_different = False
+                
+                # 各カラムを比較
+                for col in today_row.columns:
+                    today_val = today_row[col].iloc[0]
+                    yesterday_val = yesterday_row[col].iloc[0]
+                    
+                    # 数値型の場合は差分が1以上あるかチェック
+                    if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
+                        if pd.notna(today_val) and pd.notna(yesterday_val):
+                            if abs(float(today_val) - float(yesterday_val)) >= 1:
+                                is_different = True
+                                break
+                        elif pd.notna(today_val) != pd.notna(yesterday_val):  # 片方がNaNの場合
+                            is_different = True
+                            break
+                    # 数値型以外は完全一致でチェック
+                    elif today_val != yesterday_val:
+                        is_different = True
+                        break
+                
+                if is_different:
                     diff_rows.append(today_row)
             
             if diff_rows:
@@ -987,8 +1029,29 @@ def building_diff(params: DaysAgoParams = None):
                 today_row = today_df[today_df[primary_key] == key]
                 yesterday_row = yesterday_df[yesterday_df[primary_key] == key]
                 
-                # 行の値を比較
-                if not today_row.equals(yesterday_row):
+                # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
+                is_different = False
+                
+                # 各カラムを比較
+                for col in today_row.columns:
+                    today_val = today_row[col].iloc[0]
+                    yesterday_val = yesterday_row[col].iloc[0]
+                    
+                    # 数値型の場合は差分が1以上あるかチェック
+                    if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
+                        if pd.notna(today_val) and pd.notna(yesterday_val):
+                            if abs(float(today_val) - float(yesterday_val)) >= 1:
+                                is_different = True
+                                break
+                        elif pd.notna(today_val) != pd.notna(yesterday_val):  # 片方がNaNの場合
+                            is_different = True
+                            break
+                    # 数値型以外は完全一致でチェック
+                    elif today_val != yesterday_val:
+                        is_different = True
+                        break
+                
+                if is_different:
                     diff_rows.append(today_row)
             
             if diff_rows:
