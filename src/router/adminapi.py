@@ -1040,7 +1040,7 @@ def building_diff(params: DaysAgoParams = None):
                 is_different = False
                 
                 # 比較から除外するカラム（インデックス）
-                exclude_indices = [61, 62]
+                exclude_indices = [60, 61]
                 
                 # 各カラムを比較
                 for i, col in enumerate(today_row.columns):
