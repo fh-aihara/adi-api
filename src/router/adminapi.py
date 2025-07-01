@@ -731,13 +731,13 @@ def rooms_diff(params: DaysAgoParams = None):
                 # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
                 is_different = False
                 
-                # 比較から除外するカラム
-                exclude_columns = ["広さ"]
+                # 比較から除外するカラム（インデックス）
+                exclude_indices = [19]
                 
                 # 各カラムを比較
-                for col in today_row.columns:
-                    # 除外カラムはスキップ
-                    if col in exclude_columns:
+                for i, col in enumerate(today_row.columns):
+                    # 除外インデックスはスキップ
+                    if i in exclude_indices:
                         continue
                         
                     today_val = today_row[col].iloc[0]
@@ -1039,13 +1039,13 @@ def building_diff(params: DaysAgoParams = None):
                 # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
                 is_different = False
                 
-                # 比較から除外するカラム
-                exclude_columns = ["緯度", "軽度"]
+                # 比較から除外するカラム（インデックス）
+                exclude_indices = [61, 62]
                 
                 # 各カラムを比較
-                for col in today_row.columns:
-                    # 除外カラムはスキップ
-                    if col in exclude_columns:
+                for i, col in enumerate(today_row.columns):
+                    # 除外インデックスはスキップ
+                    if i in exclude_indices:
                         continue
                         
                     today_val = today_row[col].iloc[0]
