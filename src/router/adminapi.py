@@ -731,8 +731,15 @@ def rooms_diff(params: DaysAgoParams = None):
                 # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
                 is_different = False
                 
+                # 比較から除外するカラム
+                exclude_columns = ["広さ"]
+                
                 # 各カラムを比較
                 for col in today_row.columns:
+                    # 除外カラムはスキップ
+                    if col in exclude_columns:
+                        continue
+                        
                     today_val = today_row[col].iloc[0]
                     yesterday_val = yesterday_row[col].iloc[0]
                     
@@ -882,8 +889,15 @@ def contract2_diff(params: DaysAgoParams = None):
                 # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
                 is_different = False
                 
+                # 比較から除外するカラム
+                exclude_columns = ["緯度", "軽度"]
+                
                 # 各カラムを比較
                 for col in today_row.columns:
+                    # 除外カラムはスキップ
+                    if col in exclude_columns:
+                        continue
+                        
                     today_val = today_row[col].iloc[0]
                     yesterday_val = yesterday_row[col].iloc[0]
                     
