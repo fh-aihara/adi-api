@@ -755,16 +755,19 @@ def rooms_diff(params: DaysAgoParams = None):
                         today_vals = today_common[col]
                         yesterday_vals = yesterday_common[col]
                         
-                        # 数値型の場合
+                        # 数値型の場合は差分が1以上あるかチェック
                         if pd.api.types.is_numeric_dtype(today_vals):
-                            # NaNを0で埋めて差分計算
-                            diff_mask = abs(today_vals.fillna(0) - yesterday_vals.fillna(0)) >= 1
-                            # NaNの不一致もチェック
-                            nan_mask = today_vals.isna() != yesterday_vals.isna()
-                            combined_mask = diff_mask | nan_mask
+                            # 両方がNaNでない場合の数値差分チェック
+                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                            diff_mask = both_not_nan & (abs(today_vals - yesterday_vals) >= 1)
+                            # 片方だけがNaNの場合もチェック
+                            nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
+                            combined_mask = diff_mask | nan_diff_mask
                         else:
-                            # 文字列型の場合
-                            combined_mask = today_vals != yesterday_vals
+                            # 文字列型の場合：両方がNaNの場合は差分なしとする
+                            both_nan = today_vals.isna() & yesterday_vals.isna()
+                            different_values = today_vals != yesterday_vals
+                            combined_mask = different_values & ~both_nan
                         
                         # 差分があるキーをsetに追加（自動重複排除）
                         different_keys = combined_mask[combined_mask].index.tolist()
@@ -773,8 +776,8 @@ def rooms_diff(params: DaysAgoParams = None):
                 # setをリストに変換
                 changed_indices = list(changed_indices)
                 
-                # 差分詳細記録
-                for key in list(changed_indices):
+                # 差分詳細記録（最初の100件のみ）
+                for key in list(changed_indices)[:100]:
                     diff_details.append({"key": key, "differences": ["Changes detected"]})
             
             # 変更された行を取得
