@@ -1594,6 +1594,231 @@ def contract_resident_diff(params: DaysAgoParams = None):
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post('/gcp/pallet-cloud/tenants-diff')
+def tenants_diff(params: DaysAgoParams = None):
+    try:
+        # パラメータがない場合はデフォルト値を使用
+        days_ago = 0 if params is None else params.days_ago
+        
+        # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
+        today = datetime.datetime.now()
+        base_date = today - datetime.timedelta(days=days_ago)
+        yesterday = base_date - datetime.timedelta(days=1)
+        today_str = base_date.strftime("%Y%m%d")
+        yesterday_str = yesterday.strftime("%Y%m%d")
+        
+        # S3バケットとプレフィックス
+        bucket_name = "adi-external-integration"
+        prefix = "pallet-cloud/prod/"
+        
+        # 今日と昨日のファイルパス
+        today_file = f"{today_str}_PC_tenants.csv"
+        yesterday_file = f"{yesterday_str}_PC_tenants.csv"
+        
+        today_s3_path = f"{prefix}{today_file}"
+        yesterday_s3_path = f"{prefix}{yesterday_file}"
+        
+        # S3クライアントの初期化
+        s3_client = boto3.client('s3')
+        
+        # 一時ファイルパス
+        temp_today_file = f"/tmp/{today_file}"
+        temp_yesterday_file = f"/tmp/{yesterday_file}"
+        
+        # S3からファイルをダウンロード
+        try:
+            s3_client.download_file(bucket_name, today_s3_path, temp_today_file)
+            print(f"Downloaded today's file from s3://{bucket_name}/{today_s3_path}")
+        except Exception as e:
+            print(f"Error downloading today's file: {e}")
+            raise HTTPException(status_code=404, detail=f"Today's file not found: {today_file}")
+            
+        try:
+            s3_client.download_file(bucket_name, yesterday_s3_path, temp_yesterday_file)
+            print(f"Downloaded yesterday's file from s3://{bucket_name}/{yesterday_s3_path}")
+        except Exception as e:
+            print(f"Error downloading yesterday's file: {e}")
+            raise HTTPException(status_code=404, detail=f"Yesterday's file not found: {yesterday_file}")
+        
+        # CSVファイルをDataFrameに読み込む
+        today_df = pd.read_csv(temp_today_file, encoding='utf-8')
+        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8')
+        
+        print(f"Today's file has {len(today_df)} rows")
+        print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 主キーを特定（1カラム目を主キーとする）
+        if len(today_df.columns) > 0:
+            primary_key = today_df.columns[0]
+            
+            # 差分を計算
+            # 1. 今日のファイルにしかない行を抽出
+            only_in_today = today_df[~today_df[primary_key].isin(yesterday_df[primary_key])]
+            
+            # 2. 両方のファイルに存在する行を抽出
+            common_keys = today_df[today_df[primary_key].isin(yesterday_df[primary_key])][primary_key]
+            
+            # 3. 共通のキーを持つが値が異なる行を抽出
+            diff_rows = []
+            diff_details = []  # 差分の詳細を記録するリスト
+            
+            for key in common_keys:
+                today_row = today_df[today_df[primary_key] == key]
+                yesterday_row = yesterday_df[yesterday_df[primary_key] == key]
+                
+                # DataFrameが空でないことを確認
+                if today_row.empty or yesterday_row.empty:
+                    continue
+                
+                # 行の値を比較（数値項目については1以上の差分がなければ差なしとする）
+                is_different = False
+                row_diff_details = []  # この行の差分詳細
+                
+                # 各カラムを比較
+                for i, col in enumerate(today_row.columns):
+                    today_val = today_row[col].iloc[0]
+                    yesterday_val = yesterday_row[col].iloc[0]
+                    
+                    # 両方がNaNの場合は差分なしとする
+                    if pd.isna(today_val) and pd.isna(yesterday_val):
+                        continue
+                    
+                    # 数値型の場合は差分が1以上あるかチェック
+                    if pd.api.types.is_numeric_dtype(today_row[col]) and pd.api.types.is_numeric_dtype(yesterday_row[col]):
+                        if pd.notna(today_val) and pd.notna(yesterday_val):
+                            diff_value = abs(float(today_val) - float(yesterday_val))
+                            if diff_value >= 1:
+                                is_different = True
+                                row_diff_details.append({
+                                    "column": col,
+                                    "today_value": today_val,
+                                    "yesterday_value": yesterday_val,
+                                    "difference": diff_value
+                                })
+                        elif pd.notna(today_val) != pd.notna(yesterday_val):  # 片方がNaNの場合
+                            is_different = True
+                            row_diff_details.append({
+                                "column": col,
+                                "today_value": "NaN" if pd.isna(today_val) else today_val,
+                                "yesterday_value": "NaN" if pd.isna(yesterday_val) else yesterday_val,
+                                "difference": "NaN comparison"
+                            })
+                    # 数値型以外は完全一致でチェック
+                    elif today_val != yesterday_val:
+                        is_different = True
+                        row_diff_details.append({
+                            "column": col,
+                            "today_value": today_val,
+                            "yesterday_value": yesterday_val,
+                            "difference": "String difference"
+                        })
+                
+                if is_different:
+                    diff_rows.append(today_row)
+                    # キーと差分詳細を記録
+                    diff_details.append({
+                        "key": key,
+                        "differences": row_diff_details
+                    })
+            
+            if diff_rows:
+                changed_rows = pd.concat(diff_rows)
+            else:
+                changed_rows = pd.DataFrame(columns=today_df.columns)
+            
+            # 4. 差分ファイルを作成（今日にしかない行 + 変更された行）
+            diff_df = pd.concat([only_in_today, changed_rows])
+            
+            # 差分ファイルをCSVに変換
+            csv_buffer = io.StringIO()
+            diff_df.to_csv(csv_buffer, index=False)
+            
+            # S3に出力（UTF-8エンコーディングを明示的に指定）
+            output_s3_key = f"{prefix}output/tenant.csv"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=output_s3_key,
+                Body=csv_buffer.getvalue().encode('utf-8'),
+                ContentType='text/csv; charset=utf-8'
+            )
+            
+            # ローカルにも保存
+            local_dir = f"./pallet_cloud/{today_str}"
+            os.makedirs(local_dir, exist_ok=True)
+            local_file_path = f"{local_dir}/tenant.csv"
+            
+            # CSVファイルを保存
+            with open(local_file_path, 'w', encoding='utf-8') as f:
+                f.write(csv_buffer.getvalue())
+            
+            # 差分詳細をテキストファイルに出力
+            diff_result_path = f"{local_dir}/tenant-diff-result.txt"
+            with open(diff_result_path, 'w', encoding='utf-8') as f:
+                f.write(f"Tenant Diff Results - {today_str} vs {yesterday_str}\n")
+                f.write(f"Total rows in today's file: {len(today_df)}\n")
+                f.write(f"Total rows in yesterday's file: {len(yesterday_df)}\n")
+                f.write(f"New rows (only in today's file): {len(only_in_today)}\n")
+                f.write(f"Changed rows: {len(changed_rows)}\n\n")
+                
+                if len(only_in_today) > 0:
+                    f.write("=== NEW ROWS ===\n")
+                    for _, row in only_in_today.iterrows():
+                        f.write(f"New row with key: {row[primary_key]}\n")
+                    f.write("\n")
+                
+                if len(diff_details) > 0:
+                    f.write("=== CHANGED ROWS ===\n")
+                    for row_diff in diff_details:
+                        f.write(f"Row with key '{row_diff['key']}' has the following differences:\n")
+                        for diff in row_diff['differences']:
+                            f.write(f"  Column '{diff['column']}':\n")
+                            f.write(f"    Today's value: {diff['today_value']}\n")
+                            f.write(f"    Yesterday's value: {diff['yesterday_value']}\n")
+                            f.write(f"    Difference: {diff['difference']}\n")
+                        f.write("\n")
+                else:
+                    f.write("No differences found in existing rows.\n")
+            
+            # 差分詳細ファイルをS3にもアップロード
+            with open(diff_result_path, 'r', encoding='utf-8') as f:
+                diff_detail_content = f.read()
+            
+            # S3に出力
+            diff_detail_s3_key = f"{prefix}output/tenant-diff-result.txt"
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=diff_detail_s3_key,
+                Body=diff_detail_content.encode('utf-8'),
+                ContentType='text/plain; charset=utf-8'
+            )
+            
+            print(f"Saved local file to: {local_file_path}")
+            print(f"Saved diff details to: {diff_result_path}")
+            print(f"Uploaded diff details to S3: s3://{bucket_name}/{diff_detail_s3_key}")
+            
+            output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
+            
+            return {
+                "message": "テナントファイルの差分計算が完了しました",
+                "today_date": today_str,
+                "yesterday_date": yesterday_str,
+                "total_rows_today": len(today_df),
+                "total_rows_yesterday": len(yesterday_df),
+                "new_rows": len(only_in_today),
+                "changed_rows": len(changed_rows),
+                "diff_rows": len(diff_df),
+                "output_file": output_s3_path
+            }
+        else:
+            raise HTTPException(status_code=400, detail="ファイルにカラムがありません")
+            
+    except (GoogleAPICallError, NotFound) as e:
+        print(f"BigQuery Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post('/gcp/pallet-cloud/building-diff')
 def building_diff(params: DaysAgoParams = None):
     try:
