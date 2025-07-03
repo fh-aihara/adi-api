@@ -1618,6 +1618,17 @@ def tenants_diff(params: DaysAgoParams = None):
         if len(today_df.columns) > 0:
             primary_key = today_df.columns[0]
             
+            # 重複チェックと処理
+            today_duplicates = today_df[primary_key].duplicated()
+            yesterday_duplicates = yesterday_df[primary_key].duplicated()
+            
+            if today_duplicates.any() or yesterday_duplicates.any():
+                print(f"Warning: Found duplicates in primary key. Today: {today_duplicates.sum()}, Yesterday: {yesterday_duplicates.sum()}")
+                # 重複を除去（最初の値を保持）
+                today_df = today_df[~today_duplicates]
+                yesterday_df = yesterday_df[~yesterday_duplicates]
+                print(f"After removing duplicates - Today: {len(today_df)} rows, Yesterday: {len(yesterday_df)} rows")
+            
             # **最適化1: インデックスを設定して高速化**
             today_df = today_df.set_index(primary_key)
             yesterday_df = yesterday_df.set_index(primary_key)
@@ -1648,11 +1659,6 @@ def tenants_diff(params: DaysAgoParams = None):
                     if col in yesterday_common.columns:
                         today_vals = today_common[col]
                         yesterday_vals = yesterday_common[col]
-                        
-                        # インデックスを共通キーで整列
-                        common_keys_list = list(common_keys)
-                        today_vals = today_vals.reindex(common_keys_list)
-                        yesterday_vals = yesterday_vals.reindex(common_keys_list)
                         
                         # 数値型の場合は差分が1以上あるかチェック
                         if pd.api.types.is_numeric_dtype(today_vals):
