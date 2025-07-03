@@ -1649,6 +1649,11 @@ def tenants_diff(params: DaysAgoParams = None):
                         today_vals = today_common[col]
                         yesterday_vals = yesterday_common[col]
                         
+                        # インデックスを共通キーで整列
+                        common_keys_list = list(common_keys)
+                        today_vals = today_vals.reindex(common_keys_list)
+                        yesterday_vals = yesterday_vals.reindex(common_keys_list)
+                        
                         # 数値型の場合は差分が1以上あるかチェック
                         if pd.api.types.is_numeric_dtype(today_vals):
                             # 両方がNaNでない場合の数値差分チェック
