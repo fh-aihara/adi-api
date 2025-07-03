@@ -777,7 +777,7 @@ def rooms_diff(params: DaysAgoParams = None):
                 changed_indices = list(changed_indices)
                 
                 # 差分詳細記録（最初の100件のみ）
-                for key in list(changed_indices)[:100]:
+                for key in list(changed_indices):
                     diff_details.append({"key": key, "differences": ["Changes detected"]})
             
             # 変更された行を取得
