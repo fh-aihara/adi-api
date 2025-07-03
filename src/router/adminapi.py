@@ -28,6 +28,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 import boto3
 import io
+import tarfile
+import gzip
+import shutil
 
 
 DATABASE = 'bq_query.db'
@@ -2005,3 +2008,114 @@ def building_diff(params: DaysAgoParams = None):
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))    
+
+
+@router.post('/gcp/pallet-cloud/compress')
+def compress_pallet_cloud_files(params: DaysAgoParams = None):
+    try:
+        # パラメータがない場合はデフォルト値を使用
+        days_ago = 0 if params is None else params.days_ago
+        
+        # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
+        today = datetime.datetime.now()
+        base_date = today - datetime.timedelta(days=days_ago)
+        today_str = base_date.strftime("%Y%m%d")
+        
+        # ローカルディレクトリパス
+        local_dir = f"./pallet_cloud/{today_str}"
+        
+        # 必要なファイルリスト
+        required_files = [
+            "building.csv",
+            "room.csv", 
+            "contract2.csv",
+            "tenant.csv",
+            "contract_tenant.csv",
+            "contract_resident.csv"
+        ]
+        
+        # ファイルの存在確認
+        missing_files = []
+        existing_files = []
+        
+        for file_name in required_files:
+            file_path = os.path.join(local_dir, file_name)
+            if os.path.exists(file_path):
+                existing_files.append(file_path)
+                print(f"✓ Found: {file_name}")
+            else:
+                missing_files.append(file_name)
+                print(f"✗ Missing: {file_name}")
+        
+        # 全てのファイルが存在するかチェック
+        if missing_files:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Missing required files: {', '.join(missing_files)}"
+            )
+        
+        # tarファイル名
+        tar_filename = f"mdi_palettecloud_{today_str}.tar"
+        tar_filepath = os.path.join(local_dir, tar_filename)
+        
+        # gzipファイル名
+        gzip_filename = f"mdi_palettecloud_{today_str}.tar.gz"
+        gzip_filepath = os.path.join(local_dir, gzip_filename)
+        
+        print(f"Creating tar file: {tar_filepath}")
+        
+        # tarファイルを作成
+        with tarfile.open(tar_filepath, 'w') as tar:
+            for file_path in existing_files:
+                # ファイル名のみを取得（ディレクトリパスを含めない）
+                arcname = os.path.basename(file_path)
+                tar.add(file_path, arcname=arcname)
+                print(f"Added to tar: {arcname}")
+        
+        print(f"Tar file created successfully: {tar_filepath}")
+        print(f"Tar file size: {os.path.getsize(tar_filepath)} bytes")
+        
+        # gzipで圧縮
+        print(f"Compressing to gzip: {gzip_filepath}")
+        
+        with open(tar_filepath, 'rb') as f_in:
+            with gzip.open(gzip_filepath, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        
+        print(f"Gzip file created successfully: {gzip_filepath}")
+        print(f"Gzip file size: {os.path.getsize(gzip_filepath)} bytes")
+        
+        # 元のtarファイルを削除（gzipファイルのみ残す）
+        os.remove(tar_filepath)
+        print(f"Removed original tar file: {tar_filepath}")
+        
+        # 圧縮率を計算
+        original_total_size = sum(os.path.getsize(fp) for fp in existing_files)
+        compressed_size = os.path.getsize(gzip_filepath)
+        compression_ratio = (1 - compressed_size / original_total_size) * 100
+        
+        return {
+            "message": "ファイルの圧縮が完了しました",
+            "date": today_str,
+            "compressed_file": gzip_filepath,
+            "files_included": [os.path.basename(fp) for fp in existing_files],
+            "file_count": len(existing_files),
+            "original_total_size": original_total_size,
+            "compressed_size": compressed_size,
+            "compression_ratio": f"{compression_ratio:.1f}%",
+            "compression_details": {
+                "tar_filename": tar_filename,
+                "gzip_filename": gzip_filename,
+                "output_directory": local_dir
+            }
+        }
+        
+    except FileNotFoundError as e:
+        print(f"Directory not found: {e}")
+        raise HTTPException(status_code=404, detail=f"Directory not found: {local_dir}")
+    except PermissionError as e:
+        print(f"Permission error: {e}")
+        raise HTTPException(status_code=403, detail=f"Permission error: {str(e)}")
+    except Exception as e:
+        print(f"Error during compression: {e}")
+        raise HTTPException(status_code=500, detail=f"Compression error: {str(e)}")
