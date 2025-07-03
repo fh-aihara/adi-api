@@ -962,8 +962,12 @@ def contract2_diff(params: DaysAgoParams = None):
                 today_common = today_df.loc[list(common_keys)]
                 yesterday_common = yesterday_df.loc[list(common_keys)]
                 
+                # 比較から除外するカラム（インデックス）
+                exclude_indices = [21]  # 22番目のカラム（0-indexedなので21）
+                include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
+                
                 # **最適化4: カラムごとに一括比較**
-                for col in today_common.columns:
+                for col in include_columns:
                     if col in yesterday_common.columns:
                         today_vals = today_common[col]
                         yesterday_vals = yesterday_common[col]
