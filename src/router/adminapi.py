@@ -1695,7 +1695,7 @@ def tenants_diff(params: DaysAgoParams = None):
                 yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
                 
                 # 比較から除外するカラム（インデックス）
-                exclude_indices = [39, 40, 41]
+                exclude_indices = [38, 39, 40]
                 include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
                 
                 # **最適化4: カラムごとに一括比較（改良版）**
