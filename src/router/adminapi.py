@@ -1694,9 +1694,13 @@ def tenants_diff(params: DaysAgoParams = None):
                 today_common = today_df_indexed.loc[list(common_keys)]
                 yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
                 
+                # 比較から除外するカラム（インデックス）
+                exclude_indices = [39, 40, 41]
+                include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
+                
                 # **最適化4: カラムごとに一括比較（改良版）**
-                for col in today_common.columns:
-                    if col in yesterday_common.columns:
+                for col in include_columns:
+                    if col in today_common.columns and col in yesterday_common.columns:
                         today_vals = today_common[col]
                         yesterday_vals = yesterday_common[col]
                         
@@ -1726,8 +1730,8 @@ def tenants_diff(params: DaysAgoParams = None):
                         if different_keys:
                             changed_indices.update(different_keys)
                             
-                            # デバッグ用：最初の5件の詳細情報を記録
-                            for key in different_keys[:5]:
+                            # デバッグ用：差分がある全件の詳細情報を記録
+                            for key in different_keys:
                                 today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
                                 yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
                                 detailed_diff_info.append({
@@ -1813,8 +1817,8 @@ def tenants_diff(params: DaysAgoParams = None):
                     
                     # デバッグ用の詳細情報を出力
                     if detailed_diff_info:
-                        f.write("=== DETAILED DIFF INFO (First 5 differences) ===\n")
-                        for info in detailed_diff_info[:5]:
+                        f.write(f"=== DETAILED DIFF INFO (All {len(detailed_diff_info)} differences) ===\n")
+                        for info in detailed_diff_info:
                             f.write(f"Key: {info['key']}, Column: {info['column']}\n")
                             f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
                             f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
@@ -1853,7 +1857,8 @@ def tenants_diff(params: DaysAgoParams = None):
                 "output_file": output_s3_path,
                 "debug_info": {
                     "detailed_diffs_found": len(detailed_diff_info),
-                    "sample_differences": detailed_diff_info[:3] if detailed_diff_info else []
+                    "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
+                    "excluded_columns": "Columns at index 39, 40, 41 excluded from comparison"
                 }
             }
         else:
