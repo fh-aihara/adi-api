@@ -1,5 +1,6 @@
 from base64 import decode
 from lib2to3.pgen2 import token
+import zipfile
 from fastapi import APIRouter, Header, Depends, HTTPException, status, Response, UploadFile, Request
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi import FastAPI
