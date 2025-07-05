@@ -707,14 +707,27 @@ def rooms_diff(params: DaysAgoParams = None):
             print(f"Error downloading yesterday's file: {e}")
             raise HTTPException(status_code=404, detail=f"Yesterday's file not found: {yesterday_file}")
         
-        # CSVファイルをDataFrameに読み込む - データ型を最適化
-        dtype_optimization = {
-            # 文字列カラムをcategoryに変換（重複値が多い場合）
-            # 必要に応じて列名を実際のものに変更
-        }
+        # CSVファイルをDataFrameに読み込む（データクリーニング付き）
+        def clean_dataframe(df):
+            """DataFrameの文字列カラムをクリーニング"""
+            for col in df.columns:
+                if df[col].dtype == 'object':  # 文字列カラムの場合
+                    # 空文字列をNaNに統一
+                    df[col] = df[col].replace('', pd.NA)
+                    # 先頭・末尾の空白を除去
+                    df[col] = df[col].astype(str).str.strip()
+                    # 'nan'文字列をNaNに変換
+                    df[col] = df[col].replace('nan', pd.NA)
+                    # 空白のみの文字列をNaNに変換
+                    df[col] = df[col].replace(r'^\s*$', pd.NA, regex=True)
+            return df
         
-        today_df = pd.read_csv(temp_today_file, encoding='utf-8', dtype=dtype_optimization)
-        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8', dtype=dtype_optimization)
+        today_df = pd.read_csv(temp_today_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        
+        # データクリーニング
+        today_df = clean_dataframe(today_df)
+        yesterday_df = clean_dataframe(yesterday_df)
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
@@ -745,6 +758,7 @@ def rooms_diff(params: DaysAgoParams = None):
             # **最適化3: ベクトル化された比較**
             diff_details = []
             changed_indices = set()  # setを使用して重複排除を効率化
+            detailed_diff_info = []  # デバッグ用の詳細情報
             
             if common_keys:
                 # 共通キーのデータを一括で取得
@@ -755,7 +769,7 @@ def rooms_diff(params: DaysAgoParams = None):
                 exclude_indices = [19]
                 include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
                 
-                # **最適化4: カラムごとに一括比較**
+                # **最適化4: カラムごとに一括比較（改良版）**
                 for col in include_columns:
                     if col in today_common.columns and col in yesterday_common.columns:
                         today_vals = today_common[col]
@@ -770,19 +784,40 @@ def rooms_diff(params: DaysAgoParams = None):
                             nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
                             combined_mask = diff_mask | nan_diff_mask
                         else:
-                            # 文字列型の場合：両方がNaNの場合は差分なしとする
-                            both_nan = today_vals.isna() & yesterday_vals.isna()
-                            different_values = today_vals != yesterday_vals
-                            combined_mask = different_values & ~both_nan
+                            # 文字列型の場合：改良された比較ロジック
+                            # NaNの扱いを統一（両方がNaNの場合は差分なし）
+                            both_nan = pd.isna(today_vals) & pd.isna(yesterday_vals)
+                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                            one_nan = pd.isna(today_vals) != pd.isna(yesterday_vals)
+                            
+                            # 両方が値を持つ場合の比較
+                            value_diff = both_not_nan & (today_vals.astype(str) != yesterday_vals.astype(str))
+                            
+                            # 差分があるのは：値が異なる場合 OR 片方だけがNaNの場合
+                            combined_mask = value_diff | one_nan
                         
                         # 差分があるキーをsetに追加（自動重複排除）
                         different_keys = combined_mask[combined_mask].index.tolist()
-                        changed_indices.update(different_keys)
+                        if different_keys:
+                            changed_indices.update(different_keys)
+                            
+                            # デバッグ用：差分がある全件の詳細情報を記録
+                            for key in different_keys:
+                                today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
+                                yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
+                                detailed_diff_info.append({
+                                    'key': key,
+                                    'column': col,
+                                    'today_value': repr(today_val),
+                                    'yesterday_value': repr(yesterday_val),
+                                    'today_type': type(today_val).__name__,
+                                    'yesterday_type': type(yesterday_val).__name__
+                                })
                 
                 # setをリストに変換
                 changed_indices = list(changed_indices)
                 
-                # 差分詳細記録（最初の100件のみ）
+                # 差分詳細記録
                 for key in list(changed_indices):
                     diff_details.append({"key": key, "differences": ["Changes detected"]})
             
@@ -830,7 +865,7 @@ def rooms_diff(params: DaysAgoParams = None):
             with open(local_file_path, 'w', encoding='utf-8') as f:
                 f.write(csv_buffer.getvalue())
             
-            # 差分詳細をテキストファイルに出力
+            # 差分詳細をテキストファイルに出力（デバッグ情報付き）
             diff_result_path = f"{local_dir}/room-diff-result.txt"
             with open(diff_result_path, 'w', encoding='utf-8') as f:
                 f.write(f"Room Diff Results - {today_str} vs {yesterday_str}\n")
@@ -850,6 +885,15 @@ def rooms_diff(params: DaysAgoParams = None):
                     for row_diff in diff_details:
                         f.write(f"Row with key '{row_diff['key']}' has differences\n")
                     f.write("\n")
+                    
+                    # デバッグ用の詳細情報を出力
+                    if detailed_diff_info:
+                        f.write(f"=== DETAILED DIFF INFO (All {len(detailed_diff_info)} differences) ===\n")
+                        for info in detailed_diff_info:
+                            f.write(f"Key: {info['key']}, Column: {info['column']}\n")
+                            f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
+                            f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
+                            f.write("\n")
                 else:
                     f.write("No differences found in existing rows.\n")
             
@@ -881,7 +925,12 @@ def rooms_diff(params: DaysAgoParams = None):
                 "new_rows": len(only_in_today),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
-                "output_file": output_s3_path
+                "output_file": output_s3_path,
+                "debug_info": {
+                    "detailed_diffs_found": len(detailed_diff_info),
+                    "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
+                    "excluded_columns": "Column at index 19 excluded from comparison"
+                }
             }
         else:
             raise HTTPException(status_code=400, detail="ファイルに32番目のカラムがありません")
@@ -891,9 +940,8 @@ def rooms_diff(params: DaysAgoParams = None):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    
+        raise HTTPException(status_code=500, detail=str(e))    
+
 @router.post('/gcp/pallet-cloud/contract2-diff')
 def contract2_diff(params: DaysAgoParams = None):
     try:
@@ -940,28 +988,49 @@ def contract2_diff(params: DaysAgoParams = None):
             print(f"Error downloading yesterday's file: {e}")
             raise HTTPException(status_code=404, detail=f"Yesterday's file not found: {yesterday_file}")
         
-        # CSVファイルをDataFrameに読み込む
-        today_df = pd.read_csv(temp_today_file, encoding='utf-8')
-        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8')
+        # CSVファイルをDataFrameに読み込む（データクリーニング付き）
+        def clean_dataframe(df):
+            """DataFrameの文字列カラムをクリーニング"""
+            for col in df.columns:
+                if df[col].dtype == 'object':  # 文字列カラムの場合
+                    # 空文字列をNaNに統一
+                    df[col] = df[col].replace('', pd.NA)
+                    # 先頭・末尾の空白を除去
+                    df[col] = df[col].astype(str).str.strip()
+                    # 'nan'文字列をNaNに変換
+                    df[col] = df[col].replace('nan', pd.NA)
+                    # 空白のみの文字列をNaNに変換
+                    df[col] = df[col].replace(r'^\s*$', pd.NA, regex=True)
+            return df
+        
+        today_df = pd.read_csv(temp_today_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        
+        # データクリーニング
+        today_df = clean_dataframe(today_df)
+        yesterday_df = clean_dataframe(yesterday_df)
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 元のカラム順序を保存
+        original_columns = today_df.columns.tolist()
         
         # 主キーを特定（1列目のカラムを主キーとする）
         if len(today_df.columns) > 0:
             primary_key = today_df.columns[0]
             
             # **最適化1: インデックスを設定して高速化**
-            today_df = today_df.set_index(primary_key)
-            yesterday_df = yesterday_df.set_index(primary_key)
+            today_df_indexed = today_df.set_index(primary_key)
+            yesterday_df_indexed = yesterday_df.set_index(primary_key)
             
             # **最適化2: 集合演算を使用**
-            today_keys = set(today_df.index)
-            yesterday_keys = set(yesterday_df.index)
+            today_keys = set(today_df_indexed.index)
+            yesterday_keys = set(yesterday_df_indexed.index)
             
             # 1. 今日のファイルにしかない行を抽出
             only_today_keys = today_keys - yesterday_keys
-            only_in_today = today_df.loc[list(only_today_keys)] if only_today_keys else pd.DataFrame()
+            only_in_today = today_df_indexed.loc[list(only_today_keys)] if only_today_keys else pd.DataFrame()
             
             # 2. 共通キーを取得
             common_keys = today_keys & yesterday_keys
@@ -970,19 +1039,21 @@ def contract2_diff(params: DaysAgoParams = None):
             # **最適化3: ベクトル化された比較**
             diff_details = []
             changed_indices = set()  # setを使用して重複排除を効率化
+            detailed_diff_info = []  # デバッグ用の詳細情報
             
             if common_keys:
                 # 共通キーのデータを一括で取得
-                today_common = today_df.loc[list(common_keys)]
-                yesterday_common = yesterday_df.loc[list(common_keys)]
+                today_common = today_df_indexed.loc[list(common_keys)]
+                yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
                 
                 # 比較から除外するカラム（インデックス）
-                exclude_indices = [20]  # 22番目のカラムなんだけど、indexをつけた結果ずれるので1ずれている
+                # 元々20番目だったが、インデックス設定により20番目のカラムを除外
+                exclude_indices = [20]  
                 include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
                 
-                # **最適化4: カラムごとに一括比較**
+                # **最適化4: カラムごとに一括比較（改良版）**
                 for col in include_columns:
-                    if col in yesterday_common.columns:
+                    if col in today_common.columns and col in yesterday_common.columns:
                         today_vals = today_common[col]
                         yesterday_vals = yesterday_common[col]
                         
@@ -995,31 +1066,59 @@ def contract2_diff(params: DaysAgoParams = None):
                             nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
                             combined_mask = diff_mask | nan_diff_mask
                         else:
-                            # 文字列型の場合：両方がNaNの場合は差分なしとする
-                            both_nan = today_vals.isna() & yesterday_vals.isna()
-                            different_values = today_vals != yesterday_vals
-                            combined_mask = different_values & ~both_nan
+                            # 文字列型の場合：改良された比較ロジック
+                            # NaNの扱いを統一（両方がNaNの場合は差分なし）
+                            both_nan = pd.isna(today_vals) & pd.isna(yesterday_vals)
+                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                            one_nan = pd.isna(today_vals) != pd.isna(yesterday_vals)
+                            
+                            # 両方が値を持つ場合の比較
+                            value_diff = both_not_nan & (today_vals.astype(str) != yesterday_vals.astype(str))
+                            
+                            # 差分があるのは：値が異なる場合 OR 片方だけがNaNの場合
+                            combined_mask = value_diff | one_nan
                         
                         # 差分があるキーをsetに追加（自動重複排除）
                         different_keys = combined_mask[combined_mask].index.tolist()
-                        changed_indices.update(different_keys)
+                        if different_keys:
+                            changed_indices.update(different_keys)
+                            
+                            # デバッグ用：差分がある全件の詳細情報を記録
+                            for key in different_keys:
+                                today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
+                                yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
+                                detailed_diff_info.append({
+                                    'key': key,
+                                    'column': col,
+                                    'today_value': repr(today_val),
+                                    'yesterday_value': repr(yesterday_val),
+                                    'today_type': type(today_val).__name__,
+                                    'yesterday_type': type(yesterday_val).__name__
+                                })
                 
                 # setをリストに変換
                 changed_indices = list(changed_indices)
                 
-                # 差分詳細記録（最初の100件のみ）
-                for key in list(changed_indices)[:100]:
+                # 差分詳細記録
+                for key in list(changed_indices):
                     diff_details.append({"key": key, "differences": ["Changes detected"]})
             
             # 変更された行を取得
-            changed_rows = today_df.loc[changed_indices] if changed_indices else pd.DataFrame()
+            changed_rows = today_df_indexed.loc[changed_indices] if changed_indices else pd.DataFrame()
             
             # 差分ファイルを作成（今日にしかない行 + 変更された行）
             diff_frames = []
             if not only_in_today.empty:
-                diff_frames.append(only_in_today.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                only_in_today_reset = only_in_today.reset_index()
+                only_in_today_ordered = only_in_today_reset[original_columns]
+                diff_frames.append(only_in_today_ordered)
+            
             if not changed_rows.empty:
-                diff_frames.append(changed_rows.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                changed_rows_reset = changed_rows.reset_index()
+                changed_rows_ordered = changed_rows_reset[original_columns]
+                diff_frames.append(changed_rows_ordered)
             
             if diff_frames:
                 diff_df = pd.concat(diff_frames, ignore_index=True)
@@ -1048,7 +1147,7 @@ def contract2_diff(params: DaysAgoParams = None):
             with open(local_file_path, 'w', encoding='utf-8') as f:
                 f.write(csv_buffer.getvalue())
             
-            # 差分詳細をテキストファイルに出力
+            # 差分詳細をテキストファイルに出力（デバッグ情報付き）
             diff_result_path = f"{local_dir}/contract2-diff-result.txt"
             with open(diff_result_path, 'w', encoding='utf-8') as f:
                 f.write(f"Contract2 Diff Results - {today_str} vs {yesterday_str}\n")
@@ -1068,6 +1167,15 @@ def contract2_diff(params: DaysAgoParams = None):
                     for row_diff in diff_details:
                         f.write(f"Row with key '{row_diff['key']}' has differences\n")
                     f.write("\n")
+                    
+                    # デバッグ用の詳細情報を出力
+                    if detailed_diff_info:
+                        f.write(f"=== DETAILED DIFF INFO (All {len(detailed_diff_info)} differences) ===\n")
+                        for info in detailed_diff_info:
+                            f.write(f"Key: {info['key']}, Column: {info['column']}\n")
+                            f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
+                            f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
+                            f.write("\n")
                 else:
                     f.write("No differences found in existing rows.\n")
             
@@ -1099,7 +1207,12 @@ def contract2_diff(params: DaysAgoParams = None):
                 "new_rows": len(only_in_today),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
-                "output_file": output_s3_path
+                "output_file": output_s3_path,
+                "debug_info": {
+                    "detailed_diffs_found": len(detailed_diff_info),
+                    "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
+                    "excluded_columns": "Column at index 20 excluded from comparison (original 22nd column)"
+                }
             }
         else:
             raise HTTPException(status_code=400, detail="ファイルにカラムがありません")
@@ -1157,32 +1270,53 @@ def contract_tenant_diff(params: DaysAgoParams = None):
             print(f"Error downloading yesterday's file: {e}")
             raise HTTPException(status_code=404, detail=f"Yesterday's file not found: {yesterday_file}")
         
-        # CSVファイルをDataFrameに読み込む
-        today_df = pd.read_csv(temp_today_file, encoding='utf-8')
-        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8')
+        # CSVファイルをDataFrameに読み込む（データクリーニング付き）
+        def clean_dataframe(df):
+            """DataFrameの文字列カラムをクリーニング"""
+            for col in df.columns:
+                if df[col].dtype == 'object':  # 文字列カラムの場合
+                    # 空文字列をNaNに統一
+                    df[col] = df[col].replace('', pd.NA)
+                    # 先頭・末尾の空白を除去
+                    df[col] = df[col].astype(str).str.strip()
+                    # 'nan'文字列をNaNに変換
+                    df[col] = df[col].replace('nan', pd.NA)
+                    # 空白のみの文字列をNaNに変換
+                    df[col] = df[col].replace(r'^\s*$', pd.NA, regex=True)
+            return df
+        
+        today_df = pd.read_csv(temp_today_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        
+        # データクリーニング
+        today_df = clean_dataframe(today_df)
+        yesterday_df = clean_dataframe(yesterday_df)
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 元のカラム順序を保存
+        original_columns = today_df.columns.tolist()
         
         # 主キーを特定（1カラム目を主キーとする）
         if len(today_df.columns) > 1:
             primary_key = today_df.columns[0]
             
             # **最適化1: インデックスを設定して高速化**
-            today_df = today_df.set_index(primary_key)
-            yesterday_df = yesterday_df.set_index(primary_key)
+            today_df_indexed = today_df.set_index(primary_key)
+            yesterday_df_indexed = yesterday_df.set_index(primary_key)
             
             # **最適化2: 集合演算を使用**
-            today_keys = set(today_df.index)
-            yesterday_keys = set(yesterday_df.index)
+            today_keys = set(today_df_indexed.index)
+            yesterday_keys = set(yesterday_df_indexed.index)
             
             # 1. 今日のファイルにしかない行を抽出
             only_today_keys = today_keys - yesterday_keys
-            only_in_today = today_df.loc[list(only_today_keys)] if only_today_keys else pd.DataFrame()
+            only_in_today = today_df_indexed.loc[list(only_today_keys)] if only_today_keys else pd.DataFrame()
             
             # 2. 昨日のファイルにしかない行を抽出（削除された行）
             only_yesterday_keys = yesterday_keys - today_keys
-            only_in_yesterday = yesterday_df.loc[list(only_yesterday_keys)] if only_yesterday_keys else pd.DataFrame()
+            only_in_yesterday = yesterday_df_indexed.loc[list(only_yesterday_keys)] if only_yesterday_keys else pd.DataFrame()
             
             # 削除された行に2列目に1を挿入
             if not only_in_yesterday.empty and len(only_in_yesterday.columns) > 0:
@@ -1198,13 +1332,14 @@ def contract_tenant_diff(params: DaysAgoParams = None):
             # **最適化3: ベクトル化された比較**
             diff_details = []
             changed_indices = set()  # setを使用して重複排除を効率化
+            detailed_diff_info = []  # デバッグ用の詳細情報
             
             if common_keys:
                 # 共通キーのデータを一括で取得
-                today_common = today_df.loc[list(common_keys)]
-                yesterday_common = yesterday_df.loc[list(common_keys)]
+                today_common = today_df_indexed.loc[list(common_keys)]
+                yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
                 
-                # **最適化4: カラムごとに一括比較**
+                # **最適化4: カラムごとに一括比較（改良版）**
                 for col in today_common.columns:
                     if col in yesterday_common.columns:
                         today_vals = today_common[col]
@@ -1219,33 +1354,65 @@ def contract_tenant_diff(params: DaysAgoParams = None):
                             nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
                             combined_mask = diff_mask | nan_diff_mask
                         else:
-                            # 文字列型の場合：両方がNaNの場合は差分なしとする
-                            both_nan = today_vals.isna() & yesterday_vals.isna()
-                            different_values = today_vals != yesterday_vals
-                            combined_mask = different_values & ~both_nan
+                            # 文字列型の場合：改良された比較ロジック
+                            # NaNの扱いを統一（両方がNaNの場合は差分なし）
+                            both_nan = pd.isna(today_vals) & pd.isna(yesterday_vals)
+                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                            one_nan = pd.isna(today_vals) != pd.isna(yesterday_vals)
+                            
+                            # 両方が値を持つ場合の比較
+                            value_diff = both_not_nan & (today_vals.astype(str) != yesterday_vals.astype(str))
+                            
+                            # 差分があるのは：値が異なる場合 OR 片方だけがNaNの場合
+                            combined_mask = value_diff | one_nan
                         
                         # 差分があるキーをsetに追加（自動重複排除）
                         different_keys = combined_mask[combined_mask].index.tolist()
-                        changed_indices.update(different_keys)
+                        if different_keys:
+                            changed_indices.update(different_keys)
+                            
+                            # デバッグ用：差分がある全件の詳細情報を記録
+                            for key in different_keys:
+                                today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
+                                yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
+                                detailed_diff_info.append({
+                                    'key': key,
+                                    'column': col,
+                                    'today_value': repr(today_val),
+                                    'yesterday_value': repr(yesterday_val),
+                                    'today_type': type(today_val).__name__,
+                                    'yesterday_type': type(yesterday_val).__name__
+                                })
                 
                 # setをリストに変換
                 changed_indices = list(changed_indices)
                 
-                # 差分詳細記録（最初の100件のみ）
-                for key in list(changed_indices)[:100]:
+                # 差分詳細記録
+                for key in list(changed_indices):
                     diff_details.append({"key": key, "differences": ["Changes detected"]})
             
             # 変更された行を取得
-            changed_rows = today_df.loc[changed_indices] if changed_indices else pd.DataFrame()
+            changed_rows = today_df_indexed.loc[changed_indices] if changed_indices else pd.DataFrame()
             
             # 差分ファイルを作成（今日にしかない行 + 変更された行 + 削除された行）
             diff_frames = []
             if not only_in_today.empty:
-                diff_frames.append(only_in_today.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                only_in_today_reset = only_in_today.reset_index()
+                only_in_today_ordered = only_in_today_reset[original_columns]
+                diff_frames.append(only_in_today_ordered)
+            
             if not changed_rows.empty:
-                diff_frames.append(changed_rows.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                changed_rows_reset = changed_rows.reset_index()
+                changed_rows_ordered = changed_rows_reset[original_columns]
+                diff_frames.append(changed_rows_ordered)
+            
             if not only_in_yesterday.empty:
-                diff_frames.append(only_in_yesterday.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                only_in_yesterday_reset = only_in_yesterday.reset_index()
+                only_in_yesterday_ordered = only_in_yesterday_reset[original_columns]
+                diff_frames.append(only_in_yesterday_ordered)
             
             if diff_frames:
                 diff_df = pd.concat(diff_frames, ignore_index=True)
@@ -1274,7 +1441,7 @@ def contract_tenant_diff(params: DaysAgoParams = None):
             with open(local_file_path, 'w', encoding='utf-8') as f:
                 f.write(csv_buffer.getvalue())
             
-            # 差分詳細をテキストファイルに出力
+            # 差分詳細をテキストファイルに出力（デバッグ情報付き）
             diff_result_path = f"{local_dir}/contract_tenant-diff-result.txt"
             with open(diff_result_path, 'w', encoding='utf-8') as f:
                 f.write(f"Contract Tenant Diff Results - {today_str} vs {yesterday_str}\n")
@@ -1301,6 +1468,15 @@ def contract_tenant_diff(params: DaysAgoParams = None):
                     for row_diff in diff_details:
                         f.write(f"Row with key '{row_diff['key']}' has differences\n")
                     f.write("\n")
+                    
+                    # デバッグ用の詳細情報を出力
+                    if detailed_diff_info:
+                        f.write(f"=== DETAILED DIFF INFO (All {len(detailed_diff_info)} differences) ===\n")
+                        for info in detailed_diff_info:
+                            f.write(f"Key: {info['key']}, Column: {info['column']}\n")
+                            f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
+                            f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
+                            f.write("\n")
                 else:
                     f.write("No differences found in existing rows.\n")
             
@@ -1333,7 +1509,12 @@ def contract_tenant_diff(params: DaysAgoParams = None):
                 "deleted_rows": len(only_in_yesterday),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
-                "output_file": output_s3_path
+                "output_file": output_s3_path,
+                "debug_info": {
+                    "detailed_diffs_found": len(detailed_diff_info),
+                    "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
+                    "note": "All columns included in comparison (no excluded columns)"
+                }
             }
         else:
             raise HTTPException(status_code=400, detail="ファイルにカラムがありません")
@@ -1391,32 +1572,53 @@ def contract_resident_diff(params: DaysAgoParams = None):
             print(f"Error downloading yesterday's file: {e}")
             raise HTTPException(status_code=404, detail=f"Yesterday's file not found: {yesterday_file}")
         
-        # CSVファイルをDataFrameに読み込む
-        today_df = pd.read_csv(temp_today_file, encoding='utf-8')
-        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8')
+        # CSVファイルをDataFrameに読み込む（データクリーニング付き）
+        def clean_dataframe(df):
+            """DataFrameの文字列カラムをクリーニング"""
+            for col in df.columns:
+                if df[col].dtype == 'object':  # 文字列カラムの場合
+                    # 空文字列をNaNに統一
+                    df[col] = df[col].replace('', pd.NA)
+                    # 先頭・末尾の空白を除去
+                    df[col] = df[col].astype(str).str.strip()
+                    # 'nan'文字列をNaNに変換
+                    df[col] = df[col].replace('nan', pd.NA)
+                    # 空白のみの文字列をNaNに変換
+                    df[col] = df[col].replace(r'^\s*$', pd.NA, regex=True)
+            return df
+        
+        today_df = pd.read_csv(temp_today_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        
+        # データクリーニング
+        today_df = clean_dataframe(today_df)
+        yesterday_df = clean_dataframe(yesterday_df)
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 元のカラム順序を保存
+        original_columns = today_df.columns.tolist()
         
         # 主キーを特定（1カラム目を主キーとする）
         if len(today_df.columns) > 1:
             primary_key = today_df.columns[0]
             
             # **最適化1: インデックスを設定して高速化**
-            today_df = today_df.set_index(primary_key)
-            yesterday_df = yesterday_df.set_index(primary_key)
+            today_df_indexed = today_df.set_index(primary_key)
+            yesterday_df_indexed = yesterday_df.set_index(primary_key)
             
             # **最適化2: 集合演算を使用**
-            today_keys = set(today_df.index)
-            yesterday_keys = set(yesterday_df.index)
+            today_keys = set(today_df_indexed.index)
+            yesterday_keys = set(yesterday_df_indexed.index)
             
             # 1. 今日のファイルにしかない行を抽出
             only_today_keys = today_keys - yesterday_keys
-            only_in_today = today_df.loc[list(only_today_keys)] if only_today_keys else pd.DataFrame()
+            only_in_today = today_df_indexed.loc[list(only_today_keys)] if only_today_keys else pd.DataFrame()
             
             # 2. 昨日のファイルにしかない行を抽出（削除された行）
             only_yesterday_keys = yesterday_keys - today_keys
-            only_in_yesterday = yesterday_df.loc[list(only_yesterday_keys)] if only_yesterday_keys else pd.DataFrame()
+            only_in_yesterday = yesterday_df_indexed.loc[list(only_yesterday_keys)] if only_yesterday_keys else pd.DataFrame()
             
             # 削除された行に2列目に1を挿入
             if not only_in_yesterday.empty and len(only_in_yesterday.columns) > 0:
@@ -1432,13 +1634,14 @@ def contract_resident_diff(params: DaysAgoParams = None):
             # **最適化3: ベクトル化された比較**
             diff_details = []
             changed_indices = set()  # setを使用して重複排除を効率化
+            detailed_diff_info = []  # デバッグ用の詳細情報
             
             if common_keys:
                 # 共通キーのデータを一括で取得
-                today_common = today_df.loc[list(common_keys)]
-                yesterday_common = yesterday_df.loc[list(common_keys)]
+                today_common = today_df_indexed.loc[list(common_keys)]
+                yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
                 
-                # **最適化4: カラムごとに一括比較**
+                # **最適化4: カラムごとに一括比較（改良版）**
                 for col in today_common.columns:
                     if col in yesterday_common.columns:
                         today_vals = today_common[col]
@@ -1453,33 +1656,65 @@ def contract_resident_diff(params: DaysAgoParams = None):
                             nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
                             combined_mask = diff_mask | nan_diff_mask
                         else:
-                            # 文字列型の場合：両方がNaNの場合は差分なしとする
-                            both_nan = today_vals.isna() & yesterday_vals.isna()
-                            different_values = today_vals != yesterday_vals
-                            combined_mask = different_values & ~both_nan
+                            # 文字列型の場合：改良された比較ロジック
+                            # NaNの扱いを統一（両方がNaNの場合は差分なし）
+                            both_nan = pd.isna(today_vals) & pd.isna(yesterday_vals)
+                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                            one_nan = pd.isna(today_vals) != pd.isna(yesterday_vals)
+                            
+                            # 両方が値を持つ場合の比較
+                            value_diff = both_not_nan & (today_vals.astype(str) != yesterday_vals.astype(str))
+                            
+                            # 差分があるのは：値が異なる場合 OR 片方だけがNaNの場合
+                            combined_mask = value_diff | one_nan
                         
                         # 差分があるキーをsetに追加（自動重複排除）
                         different_keys = combined_mask[combined_mask].index.tolist()
-                        changed_indices.update(different_keys)
+                        if different_keys:
+                            changed_indices.update(different_keys)
+                            
+                            # デバッグ用：差分がある全件の詳細情報を記録
+                            for key in different_keys:
+                                today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
+                                yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
+                                detailed_diff_info.append({
+                                    'key': key,
+                                    'column': col,
+                                    'today_value': repr(today_val),
+                                    'yesterday_value': repr(yesterday_val),
+                                    'today_type': type(today_val).__name__,
+                                    'yesterday_type': type(yesterday_val).__name__
+                                })
                 
                 # setをリストに変換
                 changed_indices = list(changed_indices)
                 
-                # 差分詳細記録（最初の100件のみ）
-                for key in list(changed_indices)[:100]:
+                # 差分詳細記録
+                for key in list(changed_indices):
                     diff_details.append({"key": key, "differences": ["Changes detected"]})
             
             # 変更された行を取得
-            changed_rows = today_df.loc[changed_indices] if changed_indices else pd.DataFrame()
+            changed_rows = today_df_indexed.loc[changed_indices] if changed_indices else pd.DataFrame()
             
             # 差分ファイルを作成（今日にしかない行 + 変更された行 + 削除された行）
             diff_frames = []
             if not only_in_today.empty:
-                diff_frames.append(only_in_today.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                only_in_today_reset = only_in_today.reset_index()
+                only_in_today_ordered = only_in_today_reset[original_columns]
+                diff_frames.append(only_in_today_ordered)
+            
             if not changed_rows.empty:
-                diff_frames.append(changed_rows.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                changed_rows_reset = changed_rows.reset_index()
+                changed_rows_ordered = changed_rows_reset[original_columns]
+                diff_frames.append(changed_rows_ordered)
+            
             if not only_in_yesterday.empty:
-                diff_frames.append(only_in_yesterday.reset_index())
+                # インデックスをリセットして元のカラム順序を復元
+                only_in_yesterday_reset = only_in_yesterday.reset_index()
+                only_in_yesterday_ordered = only_in_yesterday_reset[original_columns]
+                diff_frames.append(only_in_yesterday_ordered)
             
             if diff_frames:
                 diff_df = pd.concat(diff_frames, ignore_index=True)
@@ -1508,7 +1743,7 @@ def contract_resident_diff(params: DaysAgoParams = None):
             with open(local_file_path, 'w', encoding='utf-8') as f:
                 f.write(csv_buffer.getvalue())
             
-            # 差分詳細をテキストファイルに出力
+            # 差分詳細をテキストファイルに出力（デバッグ情報付き）
             diff_result_path = f"{local_dir}/contract_resident-diff-result.txt"
             with open(diff_result_path, 'w', encoding='utf-8') as f:
                 f.write(f"Contract Resident Diff Results - {today_str} vs {yesterday_str}\n")
@@ -1535,6 +1770,15 @@ def contract_resident_diff(params: DaysAgoParams = None):
                     for row_diff in diff_details:
                         f.write(f"Row with key '{row_diff['key']}' has differences\n")
                     f.write("\n")
+                    
+                    # デバッグ用の詳細情報を出力
+                    if detailed_diff_info:
+                        f.write(f"=== DETAILED DIFF INFO (All {len(detailed_diff_info)} differences) ===\n")
+                        for info in detailed_diff_info:
+                            f.write(f"Key: {info['key']}, Column: {info['column']}\n")
+                            f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
+                            f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
+                            f.write("\n")
                 else:
                     f.write("No differences found in existing rows.\n")
             
@@ -1567,7 +1811,12 @@ def contract_resident_diff(params: DaysAgoParams = None):
                 "deleted_rows": len(only_in_yesterday),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
-                "output_file": output_s3_path
+                "output_file": output_s3_path,
+                "debug_info": {
+                    "detailed_diffs_found": len(detailed_diff_info),
+                    "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
+                    "note": "All columns included in comparison (no excluded columns)"
+                }
             }
         else:
             raise HTTPException(status_code=400, detail="ファイルにカラムがありません")
@@ -1871,6 +2120,7 @@ def tenants_diff(params: DaysAgoParams = None):
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post('/gcp/pallet-cloud/building-diff')
 def building_diff(params: DaysAgoParams = None):
     try:
@@ -1917,9 +2167,27 @@ def building_diff(params: DaysAgoParams = None):
             print(f"Error downloading yesterday's file: {e}")
             raise HTTPException(status_code=404, detail=f"Yesterday's file not found: {yesterday_file}")
         
-        # CSVファイルをDataFrameに読み込む
-        today_df = pd.read_csv(temp_today_file, encoding='utf-8')
-        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8')
+        # CSVファイルをDataFrameに読み込む（データクリーニング付き）
+        def clean_dataframe(df):
+            """DataFrameの文字列カラムをクリーニング"""
+            for col in df.columns:
+                if df[col].dtype == 'object':  # 文字列カラムの場合
+                    # 空文字列をNaNに統一
+                    df[col] = df[col].replace('', pd.NA)
+                    # 先頭・末尾の空白を除去
+                    df[col] = df[col].astype(str).str.strip()
+                    # 'nan'文字列をNaNに変換
+                    df[col] = df[col].replace('nan', pd.NA)
+                    # 空白のみの文字列をNaNに変換
+                    df[col] = df[col].replace(r'^\s*$', pd.NA, regex=True)
+            return df
+        
+        today_df = pd.read_csv(temp_today_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
+        
+        # データクリーニング
+        today_df = clean_dataframe(today_df)
+        yesterday_df = clean_dataframe(yesterday_df)
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
@@ -1950,6 +2218,7 @@ def building_diff(params: DaysAgoParams = None):
             # **最適化3: ベクトル化された比較**
             diff_details = []
             changed_indices = set()  # setを使用して重複排除を効率化
+            detailed_diff_info = []  # デバッグ用の詳細情報
             
             if common_keys:
                 # 共通キーのデータを一括で取得
@@ -1960,7 +2229,7 @@ def building_diff(params: DaysAgoParams = None):
                 exclude_indices = [60, 61]
                 include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
                 
-                # **最適化4: カラムごとに一括比較**
+                # **最適化4: カラムごとに一括比較（改良版）**
                 for col in include_columns:
                     if col in today_common.columns and col in yesterday_common.columns:
                         today_vals = today_common[col]
@@ -1975,20 +2244,41 @@ def building_diff(params: DaysAgoParams = None):
                             nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
                             combined_mask = diff_mask | nan_diff_mask
                         else:
-                            # 文字列型の場合：両方がNaNの場合は差分なしとする
-                            both_nan = today_vals.isna() & yesterday_vals.isna()
-                            different_values = today_vals != yesterday_vals
-                            combined_mask = different_values & ~both_nan
+                            # 文字列型の場合：改良された比較ロジック
+                            # NaNの扱いを統一（両方がNaNの場合は差分なし）
+                            both_nan = pd.isna(today_vals) & pd.isna(yesterday_vals)
+                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                            one_nan = pd.isna(today_vals) != pd.isna(yesterday_vals)
+                            
+                            # 両方が値を持つ場合の比較
+                            value_diff = both_not_nan & (today_vals.astype(str) != yesterday_vals.astype(str))
+                            
+                            # 差分があるのは：値が異なる場合 OR 片方だけがNaNの場合
+                            combined_mask = value_diff | one_nan
                         
                         # 差分があるキーをsetに追加（自動重複排除）
                         different_keys = combined_mask[combined_mask].index.tolist()
-                        changed_indices.update(different_keys)
+                        if different_keys:
+                            changed_indices.update(different_keys)
+                            
+                            # デバッグ用：差分がある全件の詳細情報を記録
+                            for key in different_keys:
+                                today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
+                                yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
+                                detailed_diff_info.append({
+                                    'key': key,
+                                    'column': col,
+                                    'today_value': repr(today_val),
+                                    'yesterday_value': repr(yesterday_val),
+                                    'today_type': type(today_val).__name__,
+                                    'yesterday_type': type(yesterday_val).__name__
+                                })
                 
                 # setをリストに変換
                 changed_indices = list(changed_indices)
                 
-                # 差分詳細記録（最初の100件のみ）
-                for key in list(changed_indices)[:100]:
+                # 差分詳細記録
+                for key in list(changed_indices):
                     diff_details.append({"key": key, "differences": ["Changes detected"]})
             
             # 変更された行を取得
@@ -2035,7 +2325,7 @@ def building_diff(params: DaysAgoParams = None):
             with open(local_file_path, 'w', encoding='utf-8') as f:
                 f.write(csv_buffer.getvalue())
             
-            # 差分詳細をテキストファイルに出力
+            # 差分詳細をテキストファイルに出力（デバッグ情報付き）
             diff_result_path = f"{local_dir}/building-diff-result.txt"
             with open(diff_result_path, 'w', encoding='utf-8') as f:
                 f.write(f"Building Diff Results - {today_str} vs {yesterday_str}\n")
@@ -2055,6 +2345,15 @@ def building_diff(params: DaysAgoParams = None):
                     for row_diff in diff_details:
                         f.write(f"Row with key '{row_diff['key']}' has differences\n")
                     f.write("\n")
+                    
+                    # デバッグ用の詳細情報を出力
+                    if detailed_diff_info:
+                        f.write(f"=== DETAILED DIFF INFO (All {len(detailed_diff_info)} differences) ===\n")
+                        for info in detailed_diff_info:
+                            f.write(f"Key: {info['key']}, Column: {info['column']}\n")
+                            f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
+                            f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
+                            f.write("\n")
                 else:
                     f.write("No differences found in existing rows.\n")
             
@@ -2086,7 +2385,12 @@ def building_diff(params: DaysAgoParams = None):
                 "new_rows": len(only_in_today),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
-                "output_file": output_s3_path
+                "output_file": output_s3_path,
+                "debug_info": {
+                    "detailed_diffs_found": len(detailed_diff_info),
+                    "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
+                    "excluded_columns": "Columns at index 60, 61 excluded from comparison"
+                }
             }
         else:
             raise HTTPException(status_code=400, detail="ファイルにカラムがありません")
@@ -2097,7 +2401,6 @@ def building_diff(params: DaysAgoParams = None):
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
 
 @router.post('/gcp/pallet-cloud/compress')
 def compress_pallet_cloud_files(params: DaysAgoParams = None):
@@ -2112,6 +2415,81 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
         
         # ローカルディレクトリパス
         local_dir = f"./pallet_cloud/{today_str}"
+        
+        # S3クライアントの初期化
+        s3_client = boto3.client('s3')
+        bucket_name = "adi-external-integration"
+        prefix = "pallet-cloud/prod/"
+        
+        # === STEP 1: CHECK用ZIP作成とS3アップロード ===
+        
+        # checkディレクトリ名とパス
+        check_dir_name = f"{today_str}_check"
+        check_dir_path = os.path.join(local_dir, check_dir_name)
+        
+        # checkディレクトリが既に存在する場合は削除
+        if os.path.exists(check_dir_path):
+            shutil.rmtree(check_dir_path)
+        
+        # checkディレクトリを作成
+        os.makedirs(check_dir_path, exist_ok=True)
+        print(f"Created check directory: {check_dir_path}")
+        
+        # ディレクトリ内の全ファイルをcheckディレクトリにコピー
+        check_copied_files = []
+        for item in os.listdir(local_dir):
+            item_path = os.path.join(local_dir, item)
+            # ディレクトリは除外
+            if os.path.isfile(item_path):
+                dest_path = os.path.join(check_dir_path, item)
+                shutil.copy2(item_path, dest_path)
+                check_copied_files.append(dest_path)
+                print(f"Copied to check: {item} -> {check_dir_name}/")
+        
+        # ZIPファイル名とパス
+        zip_filename = f"{today_str}_check.zip"
+        zip_filepath = os.path.join(local_dir, zip_filename)
+        
+        print(f"Creating ZIP file: {zip_filepath}")
+        
+        # ZIPファイルを作成
+        with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # checkディレクトリ全体をZIPに追加
+            for root, dirs, files in os.walk(check_dir_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # ZIP内でのパスを設定（check_dir_nameを含める）
+                    arcname = os.path.relpath(file_path, local_dir)
+                    zipf.write(file_path, arcname)
+                    print(f"Added to ZIP: {arcname}")
+        
+        print(f"ZIP file created successfully: {zip_filepath}")
+        print(f"ZIP file size: {os.path.getsize(zip_filepath)} bytes")
+        
+        # ZIPファイルをS3にアップロード
+        zip_s3_key = f"{prefix}check/{zip_filename}"
+        try:
+            with open(zip_filepath, 'rb') as zip_file:
+                s3_client.put_object(
+                    Bucket=bucket_name,
+                    Key=zip_s3_key,
+                    Body=zip_file,
+                    ContentType='application/zip'
+                )
+            print(f"Uploaded ZIP to S3: s3://{bucket_name}/{zip_s3_key}")
+            zip_s3_path = f"s3://{bucket_name}/{zip_s3_key}"
+        except Exception as e:
+            print(f"Error uploading ZIP to S3: {e}")
+            # S3アップロードに失敗してもメイン処理は続行
+            zip_s3_path = None
+        
+        # checkディレクトリとZIPファイルをクリーンアップ
+        shutil.rmtree(check_dir_path)
+        print(f"Removed check directory: {check_dir_path}")
+        os.remove(zip_filepath)
+        print(f"Removed local ZIP file: {zip_filepath}")
+        
+        # === STEP 2: 通常のTAR.GZ作成処理 ===
         
         # 必要なファイルリスト
         required_files = [
@@ -2220,6 +2598,12 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
                 "tar_filename": tar_filename,
                 "gzip_filename": gzip_filename,
                 "output_directory": local_dir
+            },
+            "check_zip_info": {
+                "zip_filename": zip_filename,
+                "check_files_count": len(check_copied_files),
+                "s3_upload_path": zip_s3_path,
+                "s3_upload_success": zip_s3_path is not None
             }
         }
         
