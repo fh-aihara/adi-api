@@ -1008,9 +1008,19 @@ def contract2_diff(params: DaysAgoParams = None):
         today_df = pd.read_csv(temp_today_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
         yesterday_df = pd.read_csv(temp_yesterday_file, encoding='utf-8', keep_default_na=True, na_values=['', 'NULL', 'null', 'None'])
         
+        # データクリーニング前の情報をデバッグ出力
+        print("=== BEFORE CLEANING DEBUG INFO ===")
+        print(f"Today original dtypes:\n{today_df.dtypes}")
+        print(f"Yesterday original dtypes:\n{yesterday_df.dtypes}")
+        
         # データクリーニング
         today_df = clean_dataframe(today_df)
         yesterday_df = clean_dataframe(yesterday_df)
+        
+        # データクリーニング後の情報をデバッグ出力
+        print("=== AFTER CLEANING DEBUG INFO ===")
+        print(f"Today after cleaning dtypes:\n{today_df.dtypes}")
+        print(f"Yesterday after cleaning dtypes:\n{yesterday_df.dtypes}")
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
@@ -1021,10 +1031,28 @@ def contract2_diff(params: DaysAgoParams = None):
         # 主キーを特定（1列目のカラムを主キーとする）
         if len(today_df.columns) > 0:
             primary_key = today_df.columns[0]
+            print(f"Primary key: {primary_key}")
+            
+            # 主キーの重複をチェック
+            today_duplicates = today_df[primary_key].duplicated().sum()
+            yesterday_duplicates = yesterday_df[primary_key].duplicated().sum()
+            print(f"Duplicates check - Today: {today_duplicates}, Yesterday: {yesterday_duplicates}")
+            
+            if today_duplicates > 0 or yesterday_duplicates > 0:
+                print(f"Warning: Found duplicates in primary key. Today: {today_duplicates}, Yesterday: {yesterday_duplicates}")
+                # 重複を削除
+                today_df = today_df.drop_duplicates(subset=[primary_key], keep='first')
+                yesterday_df = yesterday_df.drop_duplicates(subset=[primary_key], keep='first')
+                print(f"After removing duplicates - Today: {len(today_df)} rows, Yesterday: {len(yesterday_df)} rows")
             
             # **最適化1: インデックスを設定して高速化**
-            today_df_indexed = today_df.set_index(primary_key)
-            yesterday_df_indexed = yesterday_df.set_index(primary_key)
+            try:
+                today_df_indexed = today_df.set_index(primary_key)
+                yesterday_df_indexed = yesterday_df.set_index(primary_key)
+                print("Successfully set index for both dataframes")
+            except Exception as e:
+                print(f"ERROR setting index: {e}")
+                raise e
             
             # **最適化2: 集合演算を使用**
             today_keys = set(today_df_indexed.index)
@@ -1045,61 +1073,113 @@ def contract2_diff(params: DaysAgoParams = None):
             
             if common_keys:
                 # 共通キーのデータを一括で取得
-                today_common = today_df_indexed.loc[list(common_keys)]
-                yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
+                try:
+                    today_common = today_df_indexed.loc[list(common_keys)]
+                    yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
+                    print("Successfully extracted common keys data")
+                except Exception as e:
+                    print(f"ERROR extracting common keys data: {e}")
+                    raise e
+                
+                # デバッグ情報を出力
+                print("=== COMPARISON DEBUG INFO ===")
+                print(f"Today common shape: {today_common.shape}")
+                print(f"Yesterday common shape: {yesterday_common.shape}")
+                print(f"Today common columns: {today_common.columns.tolist()}")
+                print(f"Yesterday common columns: {yesterday_common.columns.tolist()}")
+                print(f"Today common dtypes:\n{today_common.dtypes}")
+                print(f"Yesterday common dtypes:\n{yesterday_common.dtypes}")
+                
+                # カラム名の一致確認
+                if not today_common.columns.equals(yesterday_common.columns):
+                    print("ERROR: Column names do not match!")
+                    print(f"Today only: {set(today_common.columns) - set(yesterday_common.columns)}")
+                    print(f"Yesterday only: {set(yesterday_common.columns) - set(today_common.columns)}")
+                    raise Exception("Column names do not match between today and yesterday data")
                 
                 # 比較から除外するカラム（インデックス）
                 # 元々20番目だったが、インデックス設定により20番目のカラムを除外
                 exclude_indices = [20]  
                 include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
+                print(f"Include columns for comparison: {include_columns}")
                 
                 # **最適化4: カラムごとに一括比較（改良版）**
-                for col in include_columns:
-                    if col in today_common.columns and col in yesterday_common.columns:
-                        today_vals = today_common[col]
-                        yesterday_vals = yesterday_common[col]
+                for col_index, col in enumerate(include_columns):
+                    try:
+                        print(f"Processing column {col_index + 1}/{len(include_columns)}: '{col}'")
                         
-                        # 数値型の場合は差分が1以上あるかチェック
-                        if pd.api.types.is_numeric_dtype(today_vals):
-                            # 両方がNaNでない場合の数値差分チェック
-                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
-                            diff_mask = both_not_nan & (abs(today_vals - yesterday_vals) >= 1)
-                            # 片方だけがNaNの場合もチェック
-                            nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
-                            combined_mask = diff_mask | nan_diff_mask
-                        else:
-                            # 文字列型の場合：改良された比較ロジック
-                            # NaNの扱いを統一（両方がNaNの場合は差分なし）
-                            both_nan = pd.isna(today_vals) & pd.isna(yesterday_vals)
-                            both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
-                            one_nan = pd.isna(today_vals) != pd.isna(yesterday_vals)
+                        if col in today_common.columns and col in yesterday_common.columns:
+                            today_vals = today_common[col]
+                            yesterday_vals = yesterday_common[col]
                             
-                            # 両方が値を持つ場合の比較
-                            value_diff = both_not_nan & (today_vals.astype(str) != yesterday_vals.astype(str))
+                            print(f"  Column '{col}' - Today dtype: {today_vals.dtype}, Yesterday dtype: {yesterday_vals.dtype}")
                             
-                            # 差分があるのは：値が異なる場合 OR 片方だけがNaNの場合
-                            combined_mask = value_diff | one_nan
+                            # データ型の一致確認
+                            if today_vals.dtype != yesterday_vals.dtype:
+                                print(f"  WARNING: dtype mismatch for column '{col}' - Today: {today_vals.dtype}, Yesterday: {yesterday_vals.dtype}")
+                            
+                            # 数値型の場合は差分が1以上あるかチェック
+                            if pd.api.types.is_numeric_dtype(today_vals):
+                                print(f"  Processing as numeric column")
+                                # 両方がNaNでない場合の数値差分チェック
+                                both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                                diff_mask = both_not_nan & (abs(today_vals - yesterday_vals) >= 1)
+                                # 片方だけがNaNの場合もチェック
+                                nan_diff_mask = today_vals.isna() != yesterday_vals.isna()
+                                combined_mask = diff_mask | nan_diff_mask
+                            else:
+                                print(f"  Processing as string column")
+                                # 文字列型の場合：改良された比較ロジック
+                                # NaNの扱いを統一（両方がNaNの場合は差分なし）
+                                both_nan = pd.isna(today_vals) & pd.isna(yesterday_vals)
+                                both_not_nan = pd.notna(today_vals) & pd.notna(yesterday_vals)
+                                one_nan = pd.isna(today_vals) != pd.isna(yesterday_vals)
+                                
+                                # 両方が値を持つ場合の比較
+                                try:
+                                    value_diff = both_not_nan & (today_vals.astype(str) != yesterday_vals.astype(str))
+                                except Exception as e:
+                                    print(f"  ERROR in string comparison for column '{col}': {e}")
+                                    print(f"  Today sample values: {today_vals.head()}")
+                                    print(f"  Yesterday sample values: {yesterday_vals.head()}")
+                                    raise e
+                                
+                                # 差分があるのは：値が異なる場合 OR 片方だけがNaNの場合
+                                combined_mask = value_diff | one_nan
+                            
+                            # 差分があるキーをsetに追加（自動重複排除）
+                            different_keys = combined_mask[combined_mask].index.tolist()
+                            if different_keys:
+                                changed_indices.update(different_keys)
+                                print(f"  Found {len(different_keys)} differences in column '{col}'")
+                                
+                                # デバッグ用：差分がある全件の詳細情報を記録
+                                for key in different_keys:
+                                    today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
+                                    yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
+                                    detailed_diff_info.append({
+                                        'key': key,
+                                        'column': col,
+                                        'today_value': repr(today_val),
+                                        'yesterday_value': repr(yesterday_val),
+                                        'today_type': type(today_val).__name__,
+                                        'yesterday_type': type(yesterday_val).__name__
+                                    })
+                            else:
+                                print(f"  No differences found in column '{col}'")
                         
-                        # 差分があるキーをsetに追加（自動重複排除）
-                        different_keys = combined_mask[combined_mask].index.tolist()
-                        if different_keys:
-                            changed_indices.update(different_keys)
-                            
-                            # デバッグ用：差分がある全件の詳細情報を記録
-                            for key in different_keys:
-                                today_val = today_vals.loc[key] if key in today_vals.index else 'KEY_NOT_FOUND'
-                                yesterday_val = yesterday_vals.loc[key] if key in yesterday_vals.index else 'KEY_NOT_FOUND'
-                                detailed_diff_info.append({
-                                    'key': key,
-                                    'column': col,
-                                    'today_value': repr(today_val),
-                                    'yesterday_value': repr(yesterday_val),
-                                    'today_type': type(today_val).__name__,
-                                    'yesterday_type': type(yesterday_val).__name__
-                                })
+                    except Exception as e:
+                        print(f"ERROR processing column '{col}': {e}")
+                        print(f"Column index: {col_index}")
+                        if col in today_common.columns:
+                            print(f"Today column sample: {today_common[col].head()}")
+                        if col in yesterday_common.columns:
+                            print(f"Yesterday column sample: {yesterday_common[col].head()}")
+                        raise e
                 
                 # setをリストに変換
                 changed_indices = list(changed_indices)
+                print(f"Total changed indices: {len(changed_indices)}")
                 
                 # 差分詳細記録
                 for key in list(changed_indices):
