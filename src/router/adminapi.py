@@ -1309,6 +1309,15 @@ def contract2_diff(params: DaysAgoParams = None):
 @router.post('/gcp/pallet-cloud/contract_tenant-diff')
 def contract_tenant_diff(params: DaysAgoParams = None):
     try:
+        # 除外するコントラクトIDのリストを読み込む
+        exclude_contracts = []
+        try:
+            with open('./exclude_contracts.txt', 'r') as f:
+                exclude_contracts = [line.strip() for line in f if line.strip()]
+            print(f"Loaded {len(exclude_contracts)} contract IDs to exclude")
+        except Exception as e:
+            print(f"Warning: Could not load exclude_contracts.txt: {e}")
+            
         # パラメータがない場合はデフォルト値を使用
         days_ago = 0 if params is None else params.days_ago
         
@@ -1376,6 +1385,17 @@ def contract_tenant_diff(params: DaysAgoParams = None):
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 除外対象のcontract_idに一致する行を除外
+        if len(today_df.columns) > 2 and exclude_contracts:
+            contract_id_column = today_df.columns[2]  # 0-indexで2は3カラム目
+            today_df = today_df[~today_df[contract_id_column].isin(exclude_contracts)]
+            print(f"After excluding contracts: Today's file has {len(today_df)} rows")
+        
+        if len(yesterday_df.columns) > 2 and exclude_contracts:
+            contract_id_column = yesterday_df.columns[2]  # 0-indexで2は3カラム目
+            yesterday_df = yesterday_df[~yesterday_df[contract_id_column].isin(exclude_contracts)]
+            print(f"After excluding contracts: Yesterday's file has {len(yesterday_df)} rows")
         
         # 重複検知と除去機能を追加
         def detect_and_remove_duplicates(df, file_name):
@@ -1654,6 +1674,15 @@ def contract_tenant_diff(params: DaysAgoParams = None):
 @router.post('/gcp/pallet-cloud/contract_resident-diff')
 def contract_resident_diff(params: DaysAgoParams = None):
     try:
+        # 除外するコントラクトIDのリストを読み込む
+        exclude_contracts = []
+        try:
+            with open('./exclude_contracts.txt', 'r') as f:
+                exclude_contracts = [line.strip() for line in f if line.strip()]
+            print(f"Loaded {len(exclude_contracts)} contract IDs to exclude")
+        except Exception as e:
+            print(f"Warning: Could not load exclude_contracts.txt: {e}")
+            
         # パラメータがない場合はデフォルト値を使用
         days_ago = 0 if params is None else params.days_ago
         
@@ -1721,6 +1750,17 @@ def contract_resident_diff(params: DaysAgoParams = None):
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 除外対象のcontract_idに一致する行を除外
+        if len(today_df.columns) > 2 and exclude_contracts:
+            contract_id_column = today_df.columns[2]  # 0-indexで2は3カラム目
+            today_df = today_df[~today_df[contract_id_column].isin(exclude_contracts)]
+            print(f"After excluding contracts: Today's file has {len(today_df)} rows")
+        
+        if len(yesterday_df.columns) > 2 and exclude_contracts:
+            contract_id_column = yesterday_df.columns[2]  # 0-indexで2は3カラム目
+            yesterday_df = yesterday_df[~yesterday_df[contract_id_column].isin(exclude_contracts)]
+            print(f"After excluding contracts: Yesterday's file has {len(yesterday_df)} rows")
         
         # 重複検知と除去機能を追加
         def detect_and_remove_duplicates(df, file_name):
@@ -2575,6 +2615,15 @@ def building_diff(params: DaysAgoParams = None):
 @router.post('/gcp/pallet-cloud/commitment-diff')
 def commitment_diff(params: DaysAgoParams = None):
     try:
+        # 除外するコントラクトIDのリストを読み込む
+        exclude_contracts = []
+        try:
+            with open('./exclude_contracts.txt', 'r') as f:
+                exclude_contracts = [line.strip() for line in f if line.strip()]
+            print(f"Loaded {len(exclude_contracts)} contract IDs to exclude")
+        except Exception as e:
+            print(f"Warning: Could not load exclude_contracts.txt: {e}")
+            
         # パラメータがない場合はデフォルト値を使用
         days_ago = 0 if params is None else params.days_ago
         
@@ -2642,6 +2691,17 @@ def commitment_diff(params: DaysAgoParams = None):
         
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
+        
+        # 除外対象のcontract_idに一致する行を除外
+        if len(today_df.columns) > 2 and exclude_contracts:
+            contract_id_column = today_df.columns[2]  # 0-indexで2は3カラム目
+            today_df = today_df[~today_df[contract_id_column].isin(exclude_contracts)]
+            print(f"After excluding contracts: Today's file has {len(today_df)} rows")
+        
+        if len(yesterday_df.columns) > 2 and exclude_contracts:
+            contract_id_column = yesterday_df.columns[2]  # 0-indexで2は3カラム目
+            yesterday_df = yesterday_df[~yesterday_df[contract_id_column].isin(exclude_contracts)]
+            print(f"After excluding contracts: Yesterday's file has {len(yesterday_df)} rows")
         
         # 重複検知と除去機能を追加
         def detect_and_remove_duplicates(df, file_name):
@@ -2821,6 +2881,9 @@ def commitment_diff(params: DaysAgoParams = None):
                 f.write(f"Total rows in today's file: {len(today_df)}\n")
                 f.write(f"Total rows in yesterday's file: {len(yesterday_df)}\n")
                 
+                # 除外情報を追加
+                f.write(f"Excluded contracts: {len(exclude_contracts)} contracts excluded\n")
+                
                 # 重複情報を追加
                 f.write(f"Duplicate keys in today's file: {len(today_duplicates)} - {today_duplicates}\n")
                 f.write(f"Duplicate keys in yesterday's file: {len(yesterday_duplicates)} - {yesterday_duplicates}\n")
@@ -2828,6 +2891,12 @@ def commitment_diff(params: DaysAgoParams = None):
                 f.write(f"New rows (only in today's file): {len(only_in_today)}\n")
                 f.write(f"Deleted rows (only in yesterday's file): {len(only_in_yesterday)}\n")
                 f.write(f"Changed rows: {len(changed_rows)}\n\n")
+                
+                # 除外詳細を出力
+                if exclude_contracts:
+                    f.write("=== CONTRACT EXCLUSION INFORMATION ===\n")
+                    f.write(f"Excluded {len(exclude_contracts)} contract IDs from exclude_contracts.txt\n")
+                    f.write("Target column: 3rd column (0-index: 2)\n\n")
                 
                 # 重複詳細を出力
                 if today_duplicates or yesterday_duplicates:
@@ -2892,6 +2961,7 @@ def commitment_diff(params: DaysAgoParams = None):
                 "yesterday_date": yesterday_str,
                 "total_rows_today": len(today_df),
                 "total_rows_yesterday": len(yesterday_df),
+                "excluded_contracts_count": len(exclude_contracts),
                 "today_duplicates": len(today_duplicates),
                 "yesterday_duplicates": len(yesterday_duplicates),
                 "duplicate_keys_today": today_duplicates,
@@ -2904,7 +2974,7 @@ def commitment_diff(params: DaysAgoParams = None):
                 "debug_info": {
                     "detailed_diffs_found": len(detailed_diff_info),
                     "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
-                    "note": "All columns included in comparison (no excluded columns)"
+                    "note": "All columns included in comparison (no excluded columns). Contract exclusion applied to 3rd column."
                 }
             }
         else:
