@@ -2695,13 +2695,40 @@ def commitment_diff(params: DaysAgoParams = None):
         # 除外対象のcontract_idに一致する行を除外
         if len(today_df.columns) > 2 and exclude_contracts:
             contract_id_column = today_df.columns[2]  # 0-indexで2は3カラム目
-            today_df = today_df[~today_df[contract_id_column].isin(exclude_contracts)]
-            print(f"After excluding contracts: Today's file has {len(today_df)} rows")
+            
+            # デバッグ情報を出力
+            print(f"Contract ID column: {contract_id_column}")
+            print(f"Contract ID column dtype: {today_df[contract_id_column].dtype}")
+            print(f"Sample contract IDs from today's file: {today_df[contract_id_column].head().tolist()}")
+            print(f"Exclude contracts list (first 5): {exclude_contracts[:5]}")
+            print(f"Exclude contracts types: {[type(x) for x in exclude_contracts[:5]]}")
+            
+            # 型変換: contract_idと除外リストを文字列に統一
+            today_df[contract_id_column] = today_df[contract_id_column].astype(str)
+            exclude_contracts_str = [str(x).strip() for x in exclude_contracts]
+            
+            # フィルタリング前の行数
+            before_count = len(today_df)
+            today_df = today_df[~today_df[contract_id_column].isin(exclude_contracts_str)]
+            after_count = len(today_df)
+            excluded_count = before_count - after_count
+            
+            print(f"Today's file: {before_count} -> {after_count} rows (excluded {excluded_count} rows)")
         
         if len(yesterday_df.columns) > 2 and exclude_contracts:
             contract_id_column = yesterday_df.columns[2]  # 0-indexで2は3カラム目
-            yesterday_df = yesterday_df[~yesterday_df[contract_id_column].isin(exclude_contracts)]
-            print(f"After excluding contracts: Yesterday's file has {len(yesterday_df)} rows")
+            
+            # 型変換: contract_idと除外リストを文字列に統一
+            yesterday_df[contract_id_column] = yesterday_df[contract_id_column].astype(str)
+            exclude_contracts_str = [str(x).strip() for x in exclude_contracts]
+            
+            # フィルタリング前の行数
+            before_count = len(yesterday_df)
+            yesterday_df = yesterday_df[~yesterday_df[contract_id_column].isin(exclude_contracts_str)]
+            after_count = len(yesterday_df)
+            excluded_count = before_count - after_count
+            
+            print(f"Yesterday's file: {before_count} -> {after_count} rows (excluded {excluded_count} rows)")
         
         # 重複検知と除去機能を追加
         def detect_and_remove_duplicates(df, file_name):
@@ -2896,7 +2923,10 @@ def commitment_diff(params: DaysAgoParams = None):
                 if exclude_contracts:
                     f.write("=== CONTRACT EXCLUSION INFORMATION ===\n")
                     f.write(f"Excluded {len(exclude_contracts)} contract IDs from exclude_contracts.txt\n")
-                    f.write("Target column: 3rd column (0-index: 2)\n\n")
+                    f.write("Target column: 3rd column (0-index: 2)\n")
+                    f.write(f"Contract ID column name: {today_df.columns[2] if len(today_df.columns) > 2 else 'N/A'}\n")
+                    f.write(f"Data type conversion: All values converted to string for comparison\n")
+                    f.write(f"Sample exclude list: {exclude_contracts[:10]}\n\n")
                 
                 # 重複詳細を出力
                 if today_duplicates or yesterday_duplicates:
