@@ -10,8 +10,12 @@ from sqlalchemy import null
 from sqlmodel import Field, SQLModel, create_engine, Session, select, literal_column, table, desc
 from typing import Union
 import datetime
+import pytz
 import os
 import time
+
+# Define JST timezone
+JST = pytz.timezone('Asia/Tokyo')
 import random, string
 from pathlib import Path
 import sqlite3
@@ -32,6 +36,7 @@ import io
 import tarfile
 import gzip
 import shutil
+import paramiko
 
 
 DATABASE = 'bq_query.db'
@@ -508,7 +513,7 @@ def get_hosyo_kaisya_unmatch(params: HosyoKaisyaParams):
 
 @router.post('/gcp/pallet-cloud')
 def export_to_pallet_cloud():
-    today = datetime.datetime.now().strftime("%Y%m%d")
+    today = datetime.datetime.now(JST).strftime("%Y%m%d")
     
     try:
         # 出力先のS3バケットとプレフィックス
@@ -670,7 +675,7 @@ def rooms_diff(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         yesterday = base_date - datetime.timedelta(days=1)
         today_str = base_date.strftime("%Y%m%d")
@@ -951,7 +956,7 @@ def contract2_diff(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         yesterday = base_date - datetime.timedelta(days=1)
         today_str = base_date.strftime("%Y%m%d")
@@ -1322,7 +1327,7 @@ def contract_tenant_diff(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         yesterday = base_date - datetime.timedelta(days=1)
         today_str = base_date.strftime("%Y%m%d")
@@ -1714,7 +1719,7 @@ def contract_resident_diff(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         yesterday = base_date - datetime.timedelta(days=1)
         today_str = base_date.strftime("%Y%m%d")
@@ -2098,7 +2103,7 @@ def tenants_diff(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         yesterday = base_date - datetime.timedelta(days=1)
         today_str = base_date.strftime("%Y%m%d")
@@ -2391,7 +2396,7 @@ def building_diff(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         yesterday = base_date - datetime.timedelta(days=1)
         today_str = base_date.strftime("%Y%m%d")
@@ -2682,7 +2687,7 @@ def commitment_diff(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         yesterday = base_date - datetime.timedelta(days=1)
         today_str = base_date.strftime("%Y%m%d")
@@ -3079,7 +3084,7 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
         days_ago = 0 if params is None else params.days_ago
         
         # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
-        today = datetime.datetime.now()
+        today = datetime.datetime.now(JST)
         base_date = today - datetime.timedelta(days=days_ago)
         today_str = base_date.strftime("%Y%m%d")
         
@@ -3193,7 +3198,7 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
             )
         
         # 一時ディレクトリを作成
-        temp_dir_name = f"mdi_palettecloud_{today_str}"
+        temp_dir_name = f"adi_palettecloud_{today_str}"
         temp_dir_path = os.path.join(local_dir, temp_dir_name)
         
         # 一時ディレクトリが既に存在する場合は削除
@@ -3214,11 +3219,11 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
             print(f"Copied: {file_name} -> {temp_dir_name}/")
         
         # tarファイル名
-        tar_filename = f"mdi_palettecloud_{today_str}.tar"
+        tar_filename = f"adi_palettecloud_{today_str}.tar"
         tar_filepath = os.path.join(local_dir, tar_filename)
         
         # gzipファイル名
-        gzip_filename = f"mdi_palettecloud_{today_str}.tar.gz"
+        gzip_filename = f"adi_palettecloud_{today_str}.tar.gz"
         gzip_filepath = os.path.join(local_dir, gzip_filename)
         
         print(f"Creating tar file: {tar_filepath}")
@@ -3255,8 +3260,85 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
         compressed_size = os.path.getsize(gzip_filepath)
         compression_ratio = (1 - compressed_size / original_total_size) * 100
         
+        # === STEP 3: SFTP伝送処理 ===
+        
+        # SFTP接続情報
+        sftp_host = "fex.machikoe.com"
+        sftp_user = "mmj"
+        sftp_port = 22
+        sftp_key_path = "~/.ssh/sftp_key"
+        
+        # SFTPでの伝送
+        sftp_transmission_success = False
+        sftp_error_message = None
+        done_file_created = False
+        
+        try:
+            # SSH秘密鍵を読み込み
+            key_path = os.path.expanduser(sftp_key_path)
+            private_key = paramiko.RSAKey.from_private_key_file(key_path)
+            
+            # SSH/SFTP接続を確立
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            print(f"Connecting to SFTP server: {sftp_host}:{sftp_port}")
+            ssh_client.connect(
+                hostname=sftp_host,
+                port=sftp_port,
+                username=sftp_user,
+                pkey=private_key
+            )
+            
+            # SFTPクライアントを取得
+            sftp_client = ssh_client.open_sftp()
+            
+            # メインのtar.gzファイルを伝送
+            remote_gzip_path = f"~/{gzip_filename}"
+            print(f"Uploading {gzip_filename} to {sftp_host}:{remote_gzip_path}")
+            
+            sftp_client.put(gzip_filepath, gzip_filename)
+            print(f"Successfully uploaded {gzip_filename} to SFTP server")
+            
+            # doneファイルを作成して伝送
+            done_filename = f"done_{today_str}.txt"
+            done_filepath = os.path.join(local_dir, done_filename)
+            
+            # doneファイルを作成
+            with open(done_filepath, 'w') as done_file:
+                done_file.write(f"Transfer completed at {datetime.datetime.now(JST).isoformat()}\n")
+                done_file.write(f"File: {gzip_filename}\n")
+                done_file.write(f"Date: {today_str}\n")
+            
+            # doneファイルを伝送
+            print(f"Uploading {done_filename} to SFTP server")
+            sftp_client.put(done_filepath, done_filename)
+            print(f"Successfully uploaded {done_filename} to SFTP server")
+            done_file_created = True
+            
+            # 接続を閉じる
+            sftp_client.close()
+            ssh_client.close()
+            
+            sftp_transmission_success = True
+            print("SFTP transmission completed successfully")
+            
+            # SFTP伝送成功後、ローカルファイルを削除
+            os.remove(gzip_filepath)
+            print(f"Removed local gzip file after SFTP upload: {gzip_filepath}")
+            
+            os.remove(done_filepath)
+            print(f"Removed local done file: {done_filepath}")
+            
+        except Exception as e:
+            print(f"Error during SFTP transmission: {e}")
+            sftp_transmission_success = False
+            sftp_error_message = str(e)
+            # SFTP伝送に失敗した場合はローカルファイルを保持
+            print(f"Local gzip file retained due to SFTP transmission failure: {gzip_filepath}")
+        
         return {
-            "message": "ファイルの圧縮が完了しました",
+            "message": "ファイルの圧縮と伝送が完了しました",
             "date": today_str,
             "compressed_file": gzip_filepath,
             "files_included": [os.path.basename(fp) for fp in existing_files],
@@ -3275,6 +3357,18 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
                 "check_files_count": len(check_copied_files),
                 "s3_upload_path": zip_s3_path,
                 "s3_upload_success": zip_s3_path is not None
+            },
+            "sftp_transmission": {
+                "host": sftp_host,
+                "user": sftp_user,
+                "port": sftp_port,
+                "transmission_success": sftp_transmission_success,
+                "main_file": gzip_filename,
+                "done_file": f"done_{today_str}.txt" if done_file_created else None,
+                "done_file_created": done_file_created,
+                "local_files_removed": sftp_transmission_success,
+                "error_message": sftp_error_message,
+                "transmission_status": "成功" if sftp_transmission_success else "失敗"
             }
         }
         
