@@ -739,6 +739,36 @@ def rooms_diff(params: DaysAgoParams = None):
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
         
+        # 重複検知と除去機能を追加
+        def detect_and_remove_duplicates(df, file_name):
+            """重複を検知し、除去する"""
+            if len(df.columns) == 0:
+                return df, []
+            
+            # 主キーを特定（32番目のカラムを主キーとする - rooms_diffの場合）
+            if len(df.columns) > 31:  # 0-indexedなので31が32番目
+                primary_key = df.columns[31]
+                duplicates = df[df.duplicated(subset=[primary_key], keep=False)]
+                duplicate_keys = []
+                
+                if not duplicates.empty:
+                    duplicate_keys = duplicates[primary_key].unique().tolist()
+                    print(f"Found {len(duplicate_keys)} duplicate keys in {file_name}: {duplicate_keys}")
+                    # 重複を除去（最初の行を保持）
+                    df_deduped = df.drop_duplicates(subset=[primary_key], keep='first')
+                    print(f"After deduplication: {len(df_deduped)} rows (removed {len(df) - len(df_deduped)} duplicates)")
+                    return df_deduped, duplicate_keys
+                else:
+                    print(f"No duplicates found in {file_name}")
+                    return df, duplicate_keys
+            else:
+                print(f"Warning: {file_name} doesn't have enough columns for primary key (needs at least 32 columns)")
+                return df, []
+        
+        # 重複検知と除去を実行
+        today_df, today_duplicates = detect_and_remove_duplicates(today_df, "today's file")
+        yesterday_df, yesterday_duplicates = detect_and_remove_duplicates(yesterday_df, "yesterday's file")
+        
         # 元のカラム順序を保存
         original_columns = today_df.columns.tolist()
         
@@ -878,8 +908,22 @@ def rooms_diff(params: DaysAgoParams = None):
                 f.write(f"Room Diff Results - {today_str} vs {yesterday_str}\n")
                 f.write(f"Total rows in today's file: {len(today_df)}\n")
                 f.write(f"Total rows in yesterday's file: {len(yesterday_df)}\n")
+                
+                # 重複情報を追加
+                f.write(f"Duplicate keys in today's file: {len(today_duplicates)} - {today_duplicates}\n")
+                f.write(f"Duplicate keys in yesterday's file: {len(yesterday_duplicates)} - {yesterday_duplicates}\n")
+                
                 f.write(f"New rows (only in today's file): {len(only_in_today)}\n")
                 f.write(f"Changed rows: {len(changed_rows)}\n\n")
+                
+                # 重複詳細を出力
+                if today_duplicates or yesterday_duplicates:
+                    f.write("=== DUPLICATE INFORMATION ===\n")
+                    if today_duplicates:
+                        f.write(f"Today's file had {len(today_duplicates)} duplicate keys: {today_duplicates}\n")
+                    if yesterday_duplicates:
+                        f.write(f"Yesterday's file had {len(yesterday_duplicates)} duplicate keys: {yesterday_duplicates}\n")
+                    f.write("Note: Duplicates were automatically removed (keeping first occurrence)\n\n")
                 
                 if len(only_in_today) > 0:
                     f.write("=== NEW ROWS ===\n")
@@ -929,6 +973,10 @@ def rooms_diff(params: DaysAgoParams = None):
                 "yesterday_date": yesterday_str,
                 "total_rows_today": len(today_df),
                 "total_rows_yesterday": len(yesterday_df),
+                "today_duplicates": len(today_duplicates),
+                "yesterday_duplicates": len(yesterday_duplicates),
+                "duplicate_keys_today": today_duplicates,
+                "duplicate_keys_yesterday": yesterday_duplicates,
                 "new_rows": len(only_in_today),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
@@ -947,7 +995,8 @@ def rooms_diff(params: DaysAgoParams = None):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))    
+        raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post('/gcp/pallet-cloud/contract2-diff')
 def contract2_diff(params: DaysAgoParams = None):
@@ -2460,6 +2509,32 @@ def building_diff(params: DaysAgoParams = None):
         print(f"Today's file has {len(today_df)} rows")
         print(f"Yesterday's file has {len(yesterday_df)} rows")
         
+        # 重複検知と除去機能を追加
+        def detect_and_remove_duplicates(df, file_name):
+            """重複を検知し、除去する"""
+            if len(df.columns) == 0:
+                return df, []
+            
+            # 主キーを特定（2カラム目を主キーとする - building_diffの場合）
+            primary_key = df.columns[1]
+            duplicates = df[df.duplicated(subset=[primary_key], keep=False)]
+            duplicate_keys = []
+            
+            if not duplicates.empty:
+                duplicate_keys = duplicates[primary_key].unique().tolist()
+                print(f"Found {len(duplicate_keys)} duplicate keys in {file_name}: {duplicate_keys}")
+                # 重複を除去（最初の行を保持）
+                df_deduped = df.drop_duplicates(subset=[primary_key], keep='first')
+                print(f"After deduplication: {len(df_deduped)} rows (removed {len(df) - len(df_deduped)} duplicates)")
+                return df_deduped, duplicate_keys
+            else:
+                print(f"No duplicates found in {file_name}")
+                return df, duplicate_keys
+        
+        # 重複検知と除去を実行
+        today_df, today_duplicates = detect_and_remove_duplicates(today_df, "today's file")
+        yesterday_df, yesterday_duplicates = detect_and_remove_duplicates(yesterday_df, "yesterday's file")
+        
         # 元のカラム順序を保存
         original_columns = today_df.columns.tolist()
         
@@ -2599,8 +2674,22 @@ def building_diff(params: DaysAgoParams = None):
                 f.write(f"Building Diff Results - {today_str} vs {yesterday_str}\n")
                 f.write(f"Total rows in today's file: {len(today_df)}\n")
                 f.write(f"Total rows in yesterday's file: {len(yesterday_df)}\n")
+                
+                # 重複情報を追加
+                f.write(f"Duplicate keys in today's file: {len(today_duplicates)} - {today_duplicates}\n")
+                f.write(f"Duplicate keys in yesterday's file: {len(yesterday_duplicates)} - {yesterday_duplicates}\n")
+                
                 f.write(f"New rows (only in today's file): {len(only_in_today)}\n")
                 f.write(f"Changed rows: {len(changed_rows)}\n\n")
+                
+                # 重複詳細を出力
+                if today_duplicates or yesterday_duplicates:
+                    f.write("=== DUPLICATE INFORMATION ===\n")
+                    if today_duplicates:
+                        f.write(f"Today's file had {len(today_duplicates)} duplicate keys: {today_duplicates}\n")
+                    if yesterday_duplicates:
+                        f.write(f"Yesterday's file had {len(yesterday_duplicates)} duplicate keys: {yesterday_duplicates}\n")
+                    f.write("Note: Duplicates were automatically removed (keeping first occurrence)\n\n")
                 
                 if len(only_in_today) > 0:
                     f.write("=== NEW ROWS ===\n")
@@ -2650,6 +2739,10 @@ def building_diff(params: DaysAgoParams = None):
                 "yesterday_date": yesterday_str,
                 "total_rows_today": len(today_df),
                 "total_rows_yesterday": len(yesterday_df),
+                "today_duplicates": len(today_duplicates),
+                "yesterday_duplicates": len(yesterday_duplicates),
+                "duplicate_keys_today": today_duplicates,
+                "duplicate_keys_yesterday": yesterday_duplicates,
                 "new_rows": len(only_in_today),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
