@@ -17,7 +17,7 @@ pidfile = 'prod.pid'
 raw_env = []
 
 # デーモン化する場合はTrue
-daemon = True
+daemon = False
 
 # エラーログ
 errorlog = './error_log.txt'
