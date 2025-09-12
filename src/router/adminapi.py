@@ -5,6 +5,7 @@ from fastapi import APIRouter, Header, Depends, HTTPException, status, Response,
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from fastapi import Body
 from models import query_histroy
 from sqlalchemy import null
 from sqlmodel import Field, SQLModel, create_engine, Session, select, literal_column, table, desc
@@ -37,6 +38,7 @@ import tarfile
 import gzip
 import shutil
 import paramiko
+import requests
 
 
 DATABASE = 'bq_query.db'
@@ -3474,3 +3476,38 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
     except Exception as e:
         print(f"Error during compression: {e}")
         raise HTTPException(status_code=500, detail=f"Compression error: {str(e)}")
+
+
+@router.post('/webhook/teams')
+def send_teams_webhook(payload: dict = Body(...)):
+    """
+    Power Automate Workflowを使って処理結果を通知する関数
+    """
+    try:
+        # Power Automate Workflow URL
+        workflow_url = "https://default456cf2179db44381a3fd80775df7c0.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c2467f587bca482eb99ba67e85963297/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=mYCJTdF9HBzG1CPl0Q9JL7-VkaU5ywO8Z6jBvF14Y94"
+        
+        # Power Automate Workflowにメッセージを送信
+        workflow_response = requests.post(
+            workflow_url,
+            json=payload,
+            headers={'Content-Type': 'application/json; charset=utf-8'},
+            timeout=30  # タイムアウトを30秒に設定
+        )
+        
+        print(f"Webhook notification sent. Status: {workflow_response.status_code}")
+        print(f"Response body: {workflow_response.text}")
+        
+        return {
+            "status": "success",
+            "status_code": workflow_response.status_code,
+            "response": workflow_response.text
+        }
+        
+    except Exception as e:
+        error_message = f"Failed to send webhook notification: {str(e)}"
+        print(error_message)
+        return {
+            "status": "error",
+            "message": error_message
+        }
