@@ -1505,6 +1505,23 @@ def contract_tenant_diff(params: DaysAgoParams = None):
         today_df, today_duplicates = detect_and_remove_duplicates(today_df, "today's file")
         yesterday_df, yesterday_duplicates = detect_and_remove_duplicates(yesterday_df, "yesterday's file")
         
+        # ★★★ tenant.csvから影響を受けたtenant_idを読み込む ★★★
+        affected_tenant_ids = set()
+        try:
+            tenant_csv_s3_key = f"{prefix}output/tenant.csv"
+            tenant_csv_response = s3_client.get_object(
+                Bucket=bucket_name,
+                Key=tenant_csv_s3_key
+            )
+            tenant_diff_df = pd.read_csv(io.BytesIO(tenant_csv_response['Body'].read()), encoding='utf-8')
+            
+            # tenant_idは1カラム目(index 0)
+            affected_tenant_ids = set(tenant_diff_df.iloc[:, 0].astype(str).tolist())
+            print(f"Loaded {len(affected_tenant_ids)} affected tenant IDs from tenant.csv")
+        except Exception as e:
+            print(f"Could not load tenant.csv: {e}")
+            affected_tenant_ids = set()
+        
         # 元のカラム順序を保存
         original_columns = today_df.columns.tolist()
         
@@ -1604,7 +1621,26 @@ def contract_tenant_diff(params: DaysAgoParams = None):
             # 変更された行を取得
             changed_rows = today_df_indexed.loc[changed_indices] if changed_indices else pd.DataFrame()
             
-            # 差分ファイルを作成（今日にしかない行 + 変更された行 + 削除された行）
+            # ★★★ affected_tenant_idsに関連する追加の行を抽出 ★★★
+            additional_rows_indices = []
+            if affected_tenant_ids and len(today_df.columns) > 3:
+                # 4カラム目(index 3)がtenant_idのカラム
+                tenant_id_column = today_df.columns[3]
+                
+                # tenant_idが一致する行を今日のデータから抽出
+                matching_mask = today_df[tenant_id_column].astype(str).isin(affected_tenant_ids)
+                matching_keys = today_df[matching_mask][primary_key].tolist()
+                
+                # 既に差分に含まれていない行のみを追加
+                already_included = set(only_today_keys) | set(changed_indices) | set(only_yesterday_keys)
+                additional_rows_indices = [key for key in matching_keys if key not in already_included]
+                
+                print(f"Found {len(additional_rows_indices)} additional rows related to affected tenants")
+            
+            # 追加の行を取得
+            additional_rows = today_df_indexed.loc[additional_rows_indices] if additional_rows_indices else pd.DataFrame()
+            
+            # 差分ファイルを作成（今日にしかない行 + 変更された行 + 削除された行 + 追加の行）
             diff_frames = []
             if not only_in_today.empty:
                 # インデックスをリセットして元のカラム順序を復元
@@ -1623,6 +1659,12 @@ def contract_tenant_diff(params: DaysAgoParams = None):
                 only_in_yesterday_reset = only_in_yesterday.reset_index()
                 only_in_yesterday_ordered = only_in_yesterday_reset[original_columns]
                 diff_frames.append(only_in_yesterday_ordered)
+            
+            # ★★★ 追加の行を差分に含める ★★★
+            if not additional_rows.empty:
+                additional_rows_reset = additional_rows.reset_index()
+                additional_rows_ordered = additional_rows_reset[original_columns]
+                diff_frames.append(additional_rows_ordered)
             
             if diff_frames:
                 diff_df = pd.concat(diff_frames, ignore_index=True)
@@ -1664,7 +1706,13 @@ def contract_tenant_diff(params: DaysAgoParams = None):
                 
                 f.write(f"New rows (only in today's file): {len(only_in_today)}\n")
                 f.write(f"Deleted rows (only in yesterday's file): {len(only_in_yesterday)}\n")
-                f.write(f"Changed rows: {len(changed_rows)}\n\n")
+                f.write(f"Changed rows: {len(changed_rows)}\n")
+                f.write(f"Additional rows from affected tenants: {len(additional_rows)}\n\n")
+                
+                # tenant.csvからの追加情報
+                f.write(f"Affected tenant IDs loaded: {len(affected_tenant_ids)}\n")
+                if affected_tenant_ids:
+                    f.write(f"Sample affected tenant IDs: {list(affected_tenant_ids)[:10]}\n\n")
                 
                 # 重複詳細を出力
                 if today_duplicates or yesterday_duplicates:
@@ -1701,7 +1749,15 @@ def contract_tenant_diff(params: DaysAgoParams = None):
                             f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
                             f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
                             f.write("\n")
-                else:
+                
+                # 追加の行の情報
+                if len(additional_rows) > 0:
+                    f.write("=== ADDITIONAL ROWS FROM AFFECTED TENANTS ===\n")
+                    for key in additional_rows.index:
+                        f.write(f"Additional row with key: {key}\n")
+                    f.write("\n")
+                
+                if len(diff_details) == 0 and len(only_in_today) == 0 and len(additional_rows) == 0:
                     f.write("No differences found in existing rows.\n")
             
             # 差分詳細ファイルをS3にもアップロード
@@ -1736,12 +1792,14 @@ def contract_tenant_diff(params: DaysAgoParams = None):
                 "new_rows": len(only_in_today),
                 "deleted_rows": len(only_in_yesterday),
                 "changed_rows": len(changed_indices),
+                "additional_tenant_related_rows": len(additional_rows),
+                "affected_tenant_ids_count": len(affected_tenant_ids),
                 "diff_rows": len(diff_df),
                 "output_file": output_s3_path,
                 "debug_info": {
                     "detailed_diffs_found": len(detailed_diff_info),
                     "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
-                    "note": "All columns included in comparison (no excluded columns)"
+                    "note": "All columns included in comparison (no excluded columns). Additional rows added based on tenant.csv (tenant_id in column 4)"
                 }
             }
         else:
@@ -1753,6 +1811,7 @@ def contract_tenant_diff(params: DaysAgoParams = None):
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post('/gcp/pallet-cloud/contract_resident-diff')
 def contract_resident_diff(params: DaysAgoParams = None):
@@ -1897,6 +1956,23 @@ def contract_resident_diff(params: DaysAgoParams = None):
         today_df, today_duplicates = detect_and_remove_duplicates(today_df, "today's file")
         yesterday_df, yesterday_duplicates = detect_and_remove_duplicates(yesterday_df, "yesterday's file")
         
+        # ★★★ tenant.csvから影響を受けたtenant_idを読み込む ★★★
+        affected_tenant_ids = set()
+        try:
+            tenant_csv_s3_key = f"{prefix}output/tenant.csv"
+            tenant_csv_response = s3_client.get_object(
+                Bucket=bucket_name,
+                Key=tenant_csv_s3_key
+            )
+            tenant_diff_df = pd.read_csv(io.BytesIO(tenant_csv_response['Body'].read()), encoding='utf-8')
+            
+            # tenant_idは1カラム目(index 0)
+            affected_tenant_ids = set(tenant_diff_df.iloc[:, 0].astype(str).tolist())
+            print(f"Loaded {len(affected_tenant_ids)} affected tenant IDs from tenant.csv")
+        except Exception as e:
+            print(f"Could not load tenant.csv: {e}")
+            affected_tenant_ids = set()
+        
         # 元のカラム順序を保存
         original_columns = today_df.columns.tolist()
         
@@ -1996,7 +2072,26 @@ def contract_resident_diff(params: DaysAgoParams = None):
             # 変更された行を取得
             changed_rows = today_df_indexed.loc[changed_indices] if changed_indices else pd.DataFrame()
             
-            # 差分ファイルを作成（今日にしかない行 + 変更された行 + 削除された行）
+            # ★★★ affected_tenant_idsに関連する追加の行を抽出 ★★★
+            additional_rows_indices = []
+            if affected_tenant_ids and len(today_df.columns) > 3:
+                # 4カラム目(index 3)がtenant_idのカラム
+                tenant_id_column = today_df.columns[3]
+                
+                # tenant_idが一致する行を今日のデータから抽出
+                matching_mask = today_df[tenant_id_column].astype(str).isin(affected_tenant_ids)
+                matching_keys = today_df[matching_mask][primary_key].tolist()
+                
+                # 既に差分に含まれていない行のみを追加
+                already_included = set(only_today_keys) | set(changed_indices) | set(only_yesterday_keys)
+                additional_rows_indices = [key for key in matching_keys if key not in already_included]
+                
+                print(f"Found {len(additional_rows_indices)} additional rows related to affected tenants")
+            
+            # 追加の行を取得
+            additional_rows = today_df_indexed.loc[additional_rows_indices] if additional_rows_indices else pd.DataFrame()
+            
+            # 差分ファイルを作成（今日にしかない行 + 変更された行 + 削除された行 + 追加の行）
             diff_frames = []
             if not only_in_today.empty:
                 # インデックスをリセットして元のカラム順序を復元
@@ -2015,6 +2110,12 @@ def contract_resident_diff(params: DaysAgoParams = None):
                 only_in_yesterday_reset = only_in_yesterday.reset_index()
                 only_in_yesterday_ordered = only_in_yesterday_reset[original_columns]
                 diff_frames.append(only_in_yesterday_ordered)
+            
+            # ★★★ 追加の行を差分に含める ★★★
+            if not additional_rows.empty:
+                additional_rows_reset = additional_rows.reset_index()
+                additional_rows_ordered = additional_rows_reset[original_columns]
+                diff_frames.append(additional_rows_ordered)
             
             if diff_frames:
                 diff_df = pd.concat(diff_frames, ignore_index=True)
@@ -2056,7 +2157,13 @@ def contract_resident_diff(params: DaysAgoParams = None):
                 
                 f.write(f"New rows (only in today's file): {len(only_in_today)}\n")
                 f.write(f"Deleted rows (only in yesterday's file): {len(only_in_yesterday)}\n")
-                f.write(f"Changed rows: {len(changed_rows)}\n\n")
+                f.write(f"Changed rows: {len(changed_rows)}\n")
+                f.write(f"Additional rows from affected tenants: {len(additional_rows)}\n\n")
+                
+                # tenant.csvからの追加情報
+                f.write(f"Affected tenant IDs loaded: {len(affected_tenant_ids)}\n")
+                if affected_tenant_ids:
+                    f.write(f"Sample affected tenant IDs: {list(affected_tenant_ids)[:10]}\n\n")
                 
                 # 重複詳細を出力
                 if today_duplicates or yesterday_duplicates:
@@ -2093,7 +2200,15 @@ def contract_resident_diff(params: DaysAgoParams = None):
                             f.write(f"  Today: {info['today_value']} (type: {info['today_type']})\n")
                             f.write(f"  Yesterday: {info['yesterday_value']} (type: {info['yesterday_type']})\n")
                             f.write("\n")
-                else:
+                
+                # 追加の行の情報
+                if len(additional_rows) > 0:
+                    f.write("=== ADDITIONAL ROWS FROM AFFECTED TENANTS ===\n")
+                    for key in additional_rows.index:
+                        f.write(f"Additional row with key: {key}\n")
+                    f.write("\n")
+                
+                if len(diff_details) == 0 and len(only_in_today) == 0 and len(additional_rows) == 0:
                     f.write("No differences found in existing rows.\n")
             
             # 差分詳細ファイルをS3にもアップロード
@@ -2128,12 +2243,14 @@ def contract_resident_diff(params: DaysAgoParams = None):
                 "new_rows": len(only_in_today),
                 "deleted_rows": len(only_in_yesterday),
                 "changed_rows": len(changed_indices),
+                "additional_tenant_related_rows": len(additional_rows),
+                "affected_tenant_ids_count": len(affected_tenant_ids),
                 "diff_rows": len(diff_df),
                 "output_file": output_s3_path,
                 "debug_info": {
                     "detailed_diffs_found": len(detailed_diff_info),
                     "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
-                    "note": "All columns included in comparison (no excluded columns)"
+                    "note": "All columns included in comparison (no excluded columns). Additional rows added based on tenant.csv (tenant_id in column 4)"
                 }
             }
         else:
