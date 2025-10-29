@@ -3929,6 +3929,179 @@ def compress_pallet_cloud_files(params: DaysAgoParams = None):
         print(f"Error during compression: {e}")
         raise HTTPException(status_code=500, detail=f"Compression error: {str(e)}")
 
+@router.post('/gcp/pallet-cloud/transfer-equipment')
+def transfer_equipment(params: DaysAgoParams = None):
+    try:
+        # パラメータがない場合はデフォルト値を使用
+        days_ago = 0 if params is None else params.days_ago
+        
+        # 現在の日付と指定された日数前の日付をyyyymmdd形式で取得
+        today = datetime.datetime.now(JST)
+        base_date = today - datetime.timedelta(days=days_ago)
+        today_str = base_date.strftime("%Y%m%d")
+        
+        # 現在の日時をYYYYMMDDhhmmss形式で取得
+        current_datetime_str = datetime.datetime.now(JST).strftime("%Y%m%d%H%M%S")
+        
+        # ローカルディレクトリパス
+        local_dir = f"./pallet_cloud/{today_str}"
+        source_file = os.path.join(local_dir, "equipments-diff.csv")
+        
+        # ファイルの存在確認
+        if not os.path.exists(source_file):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Source file not found: {source_file}"
+            )
+        
+        print(f"Found source file: {source_file}")
+        
+        # 一時ディレクトリを作成
+        temp_dir_name = f"equipment_transfer_{current_datetime_str}"
+        temp_dir_path = os.path.join(local_dir, temp_dir_name)
+        
+        # 一時ディレクトリが既に存在する場合は削除
+        if os.path.exists(temp_dir_path):
+            shutil.rmtree(temp_dir_path)
+        
+        # 一時ディレクトリを作成
+        os.makedirs(temp_dir_path, exist_ok=True)
+        print(f"Created temporary directory: {temp_dir_path}")
+        
+        # リネームしたファイル名
+        renamed_filename = f"equipment_{current_datetime_str}.csv"
+        renamed_filepath = os.path.join(temp_dir_path, renamed_filename)
+        
+        # ファイルをコピー＆リネーム
+        shutil.copy2(source_file, renamed_filepath)
+        print(f"Copied and renamed: equipments-diff.csv -> {renamed_filename}")
+        
+        # done.txtファイルを作成
+        done_filename = "done.txt"
+        done_filepath = os.path.join(temp_dir_path, done_filename)
+        
+        # 現在のUNIXタイムスタンプを取得
+        unix_timestamp = int(time.time())
+        
+        with open(done_filepath, 'w') as done_file:
+            done_file.write(str(unix_timestamp))
+        
+        print(f"Created done.txt with timestamp: {unix_timestamp}")
+        
+        # === SFTP伝送処理 ===
+        
+        # SFTP接続情報
+        sftp_host = "transfer.paletteio.cloud"
+        sftp_user = "mdi"
+        sftp_port = 22
+        sftp_key_path = "~/.ssh/sftp_key"
+        sftp_remote_dir = "data/mdi/"  # $HOME/data/mdi/
+        
+        sftp_transmission_success = False
+        sftp_error_message = None
+        transferred_files = []
+        
+        try:
+            # SSH秘密鍵を読み込み
+            key_path = os.path.expanduser(sftp_key_path)
+            private_key = paramiko.RSAKey.from_private_key_file(key_path)
+            
+            # SSH/SFTP接続を確立
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            
+            print(f"Connecting to SFTP server: {sftp_host}:{sftp_port}")
+            ssh_client.connect(
+                hostname=sftp_host,
+                port=sftp_port,
+                username=sftp_user,
+                pkey=private_key
+            )
+            
+            # SFTPクライアントを取得
+            sftp_client = ssh_client.open_sftp()
+            
+            # リモートディレクトリに移動（存在しない場合は作成を試みる）
+            try:
+                sftp_client.chdir(sftp_remote_dir)
+                print(f"Changed to remote directory: {sftp_remote_dir}")
+            except IOError:
+                # ディレクトリが存在しない場合は作成を試みる
+                print(f"Remote directory does not exist, attempting to create: {sftp_remote_dir}")
+                try:
+                    sftp_client.mkdir(sftp_remote_dir)
+                    sftp_client.chdir(sftp_remote_dir)
+                    print(f"Created and changed to remote directory: {sftp_remote_dir}")
+                except Exception as mkdir_error:
+                    print(f"Failed to create remote directory: {mkdir_error}")
+                    raise
+            
+            # equipment_*.csvファイルを伝送
+            remote_equipment_path = renamed_filename
+            print(f"Uploading {renamed_filename} to {sftp_host}:{sftp_remote_dir}{remote_equipment_path}")
+            
+            sftp_client.put(renamed_filepath, remote_equipment_path)
+            transferred_files.append(renamed_filename)
+            print(f"Successfully uploaded {renamed_filename} to SFTP server")
+            
+            # done.txtファイルを伝送
+            remote_done_path = done_filename
+            print(f"Uploading {done_filename} to {sftp_host}:{sftp_remote_dir}{remote_done_path}")
+            
+            sftp_client.put(done_filepath, remote_done_path)
+            transferred_files.append(done_filename)
+            print(f"Successfully uploaded {done_filename} to SFTP server")
+            
+            # 接続を閉じる
+            sftp_client.close()
+            ssh_client.close()
+            
+            sftp_transmission_success = True
+            print("SFTP transmission completed successfully")
+            
+            # SFTP伝送成功後、一時ディレクトリを削除
+            shutil.rmtree(temp_dir_path)
+            print(f"Removed temporary directory: {temp_dir_path}")
+            
+        except Exception as e:
+            print(f"Error during SFTP transmission: {e}")
+            sftp_transmission_success = False
+            sftp_error_message = str(e)
+            # SFTP伝送に失敗した場合は一時ディレクトリを保持
+            print(f"Temporary directory retained due to SFTP transmission failure: {temp_dir_path}")
+        
+        return {
+            "message": "Equipment file transfer completed" if sftp_transmission_success else "Equipment file transfer failed",
+            "date": today_str,
+            "timestamp": current_datetime_str,
+            "source_file": source_file,
+            "renamed_file": renamed_filename,
+            "done_file": done_filename,
+            "unix_timestamp": unix_timestamp,
+            "temporary_directory": temp_dir_path,
+            "temporary_directory_removed": sftp_transmission_success,
+            "sftp_transmission": {
+                "host": sftp_host,
+                "user": sftp_user,
+                "port": sftp_port,
+                "remote_directory": sftp_remote_dir,
+                "transmission_success": sftp_transmission_success,
+                "transferred_files": transferred_files,
+                "error_message": sftp_error_message,
+                "transmission_status": "成功" if sftp_transmission_success else "失敗"
+            }
+        }
+        
+    except FileNotFoundError as e:
+        print(f"File not found: {e}")
+        raise HTTPException(status_code=404, detail=f"File not found: {str(e)}")
+    except PermissionError as e:
+        print(f"Permission error: {e}")
+        raise HTTPException(status_code=403, detail=f"Permission error: {str(e)}")
+    except Exception as e:
+        print(f"Error during equipment transfer: {e}")
+        raise HTTPException(status_code=500, detail=f"Equipment transfer error: {str(e)}")
+
 
 @router.post('/webhook/teams')
 def send_teams_webhook(payload: dict = Body(...)):
