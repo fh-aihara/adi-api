@@ -1135,8 +1135,9 @@ def equipments_diff(params: DaysAgoParams = None):
                 today_common = today_df_indexed.loc[list(common_keys)]
                 yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
                 
-                # 全カラムを比較対象とする
-                include_columns = today_common.columns.tolist()
+                # 比較から除外するカラム（インデックス）
+                exclude_indices = [3]  # 4カラム目（0-indexで3）の更新日時を除外
+                include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
                 
                 # **最適化4: カラムごとに一括比較（改良版）**
                 for col in include_columns:
@@ -1304,6 +1305,18 @@ def equipments_diff(params: DaysAgoParams = None):
             
             output_s3_path = f"s3://{bucket_name}/{output_s3_key}"
             
+            # NaN値をJSON安全な形式に変換する関数
+            def sanitize_for_json(value_list):
+                """NaN値を文字列に変換してJSON安全にする"""
+                import math
+                result = []
+                for val in value_list:
+                    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+                        result.append("NaN")
+                    else:
+                        result.append(val)
+                return result
+            
             return {
                 "message": "設備ファイルの差分計算が完了しました",
                 "today_date": today_str,
@@ -1312,8 +1325,8 @@ def equipments_diff(params: DaysAgoParams = None):
                 "total_rows_yesterday": len(yesterday_df),
                 "today_duplicates": len(today_duplicates),
                 "yesterday_duplicates": len(yesterday_duplicates),
-                "duplicate_keys_today": today_duplicates,
-                "duplicate_keys_yesterday": yesterday_duplicates,
+                "duplicate_keys_today": sanitize_for_json(today_duplicates),
+                "duplicate_keys_yesterday": sanitize_for_json(yesterday_duplicates),
                 "new_rows": len(only_in_today),
                 "changed_rows": len(changed_indices),
                 "diff_rows": len(diff_df),
@@ -1321,7 +1334,8 @@ def equipments_diff(params: DaysAgoParams = None):
                 "debug_info": {
                     "detailed_diffs_found": len(detailed_diff_info),
                     "sample_differences": detailed_diff_info[:3] if detailed_diff_info else [],
-                    "primary_key_column": primary_key
+                    "primary_key_column": primary_key,
+                    "excluded_columns": "Column at index 3 (4th column - update timestamp) excluded from comparison"
                 }
             }
         else:
