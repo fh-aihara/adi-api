@@ -1135,10 +1135,11 @@ def equipments_diff(params: DaysAgoParams = None):
                 today_common = today_df_indexed.loc[list(common_keys)]
                 yesterday_common = yesterday_df_indexed.loc[list(common_keys)]
                 
-                # 比較から除外するカラム（インデックス）
-                exclude_indices = [3]  # 4カラム目（0-indexで3）の更新日時を除外
-                include_columns = [col for i, col in enumerate(today_common.columns) if i not in exclude_indices]
+                # カラム名"更新日時"を除外
+                include_columns = [col for col in today_common.columns if col != "更新日時"]
                 
+                print(f"Excluding column '更新日時' from comparison. Total columns to compare: {len(include_columns)}")
+                            
                 # **最適化4: カラムごとに一括比較（改良版）**
                 for col in include_columns:
                     if col in today_common.columns and col in yesterday_common.columns:
